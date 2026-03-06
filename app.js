@@ -80,7 +80,8 @@ function render() {
   renderNav();
 
   if (tab === 'home') renderHome();
-  else renderHistory();
+  else if (tab === 'history') renderHistory();
+  else renderSettings();
 }
 
 function renderNav() {
@@ -165,6 +166,7 @@ function renderHome() {
   const month = fromSojuUnits(monthSoju, baseType);
 
   const progress = Math.min(100, (rollingSoju / state.weeklyGoal) * 100 || 0);
+  const todayLimitAsSojuBottles = todayLimitSoju.toFixed(1);
 
   const alcoholButtons = Object.entries(ALCOHOL_UNITS)
     .map(([k, v]) => `<button class="alcohol-btn ${state.draftType === k ? 'active' : ''}" data-type="${k}">${v.name}</button>`)
@@ -173,12 +175,16 @@ function renderHome() {
   view.innerHTML = `
     <section class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
-        <h2 class="title" style="margin:0">오늘 마실 수 있는 양</h2>
+        <div class="row" style="align-items:center; gap:6px;">
+          <h2 class="title" style="margin:0">오늘 마실 수 있는 양</h2>
+          <button class="info-btn" id="formulaInfoBtn" title="계산식 보기">i</button>
+        </div>
         <button class="ghost" id="goSettings">설정</button>
       </div>
-      <div class="big">${todayLimit.toFixed(1)} ${baseInfo.name} 기준</div>
+      <div class="big">오늘 가능량: ${baseInfo.name} 약 ${todayLimit.toFixed(1)}잔(병)</div>
+      <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병 기준</p>
       <p class="sub">기준 주종: ${baseInfo.name} (${baseInfo.baseAmount})</p>
-      <p class="sub">계산식: 주간 목표 - (최근7일 누적 - 오늘 섭취)</p>
+      <div id="formulaInfoBox" class="info-pop" style="display:none;">계산식: 주간 목표 - (최근7일 누적 - 오늘 섭취)</div>
     </section>
 
     <section class="card">
@@ -208,9 +214,14 @@ function renderHome() {
   `;
 
   document.getElementById('goSettings').onclick = () => {
-    state.isOnboarded = false;
-    saveState();
+    tab = 'settings';
     render();
+  };
+
+  document.getElementById('formulaInfoBtn').onclick = () => {
+    const box = document.getElementById('formulaInfoBox');
+    const isHidden = box.style.display === 'none';
+    box.style.display = isHidden ? 'block' : 'none';
   };
 
   document.querySelectorAll('.alcohol-btn').forEach((btn) => {
@@ -283,6 +294,44 @@ function renderHistory() {
       render();
     };
   });
+}
+
+
+function renderSettings() {
+  const typeOptions = Object.entries(ALCOHOL_UNITS)
+    .map(([k, v]) => `<option value="${k}" ${state.goalBaseType === k ? 'selected' : ''}>${v.name} (${v.baseAmount})</option>`)
+    .join('');
+
+  const goalInBase = fromSojuUnits(state.weeklyGoal, state.goalBaseType);
+
+  view.innerHTML = `
+    <section class="card">
+      <h2 class="title">설정</h2>
+      <p class="sub">기준 주종과 주간 목표를 변경할 수 있어요.</p>
+
+      <label>기준 주종</label>
+      <select id="settingsBaseType">${typeOptions}</select>
+
+      <label>주간 목표 (기준 주종 단위)</label>
+      <input id="settingsGoal" type="number" step="0.5" min="0.5" value="${goalInBase.toFixed(1)}" />
+
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="saveSettings">저장</button>
+      </div>
+    </section>
+  `;
+
+  document.getElementById('saveSettings').onclick = () => {
+    const baseType = document.getElementById('settingsBaseType').value;
+    const goalInSelected = Math.max(0.5, Number(document.getElementById('settingsGoal').value || 3));
+
+    state.goalBaseType = baseType;
+    state.weeklyGoal = toSojuUnits(goalInSelected, baseType);
+
+    saveState();
+    tab = 'home';
+    render();
+  };
 }
 
 render();
