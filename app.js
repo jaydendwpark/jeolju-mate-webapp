@@ -259,7 +259,7 @@ function renderHome() {
 
     <section class="card">
       <h2 class="title">월 누적</h2>
-      <div class="big" style="font-size:28px">${baseInfo.name} ${month.toFixed(1)}${baseUnitLabel} (${formatBaseAmount(baseInfo.baseAmount)})</div>
+      <div class="big" style="font-size:28px">${baseInfo.name} ${month.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
     </section>
 
     <section class="card">
@@ -271,7 +271,6 @@ function renderHome() {
           <button class="ghost date-btn" id="dateToday">오늘</button>
         </div>
       </div>
-      <p class="sub">선택된 날짜: <strong>${state.draftDate}</strong></p>
       <input id="dateInput" type="date" style="display:none;" />
 
       ${addedLines ? `<div style="margin-top:10px">${addedLines}</div>` : `<p class="empty" style="margin:10px 0 0">아직 추가된 음주가 없어요.</p>`}
@@ -404,9 +403,41 @@ function renderHistory() {
       <div><strong>${info.name}</strong> · ${l.amount}배</div>
       <div class="small">${new Date(l.timestamp).toLocaleString('ko-KR')}</div>
       <div class="small">환산: ${converted.toFixed(1)} ${baseInfo.name} 기준</div>
-      <div style="margin-top:8px"><button class="danger" data-id="${l.id}">삭제</button></div>
+      <div class="history-actions">
+        <button class="ghost btn-sm" data-edit-id="${l.id}">편집</button>
+        <button class="danger btn-sm" data-id="${l.id}">삭제</button>
+      </div>
     `;
     list.appendChild(el);
+  });
+
+  list.querySelectorAll('button[data-edit-id]').forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.editId;
+      const target = state.logs.find((l) => l.id === id);
+      if (!target) return;
+
+      const nextAmountRaw = prompt('새 음주량(배수)을 입력해 주세요.', String(target.amount));
+      if (nextAmountRaw === null) return;
+      const nextAmount = Number(nextAmountRaw);
+      if (!nextAmount || nextAmount <= 0) return alert('음주량은 0보다 커야 합니다.');
+
+      const currentDateKey = formatDateKey(new Date(target.timestamp));
+      const nextDateKey = prompt('날짜(YYYY-MM-DD)를 입력해 주세요.', currentDateKey);
+      if (nextDateKey === null) return;
+
+      const m = nextDateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return alert('날짜 형식이 올바르지 않습니다. 예: 2026-03-06');
+
+      const y = Number(m[1]);
+      const mo = Number(m[2]);
+      const d = Number(m[3]);
+      target.amount = nextAmount;
+      target.timestamp = new Date(y, mo - 1, d, 12, 0, 0, 0).toISOString();
+
+      saveState();
+      render();
+    };
   });
 
   list.querySelectorAll('button[data-id]').forEach((btn) => {
