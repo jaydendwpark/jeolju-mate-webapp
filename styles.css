@@ -114,6 +114,16 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 .emoji-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .emoji-btn { padding: 6px 9px; font-size: 18px; line-height: 1; }
 .emoji-btn.active { background: #e0e7ff; border: 1px solid #c7d2fe; }
+.quick-add-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+.quick-add-grid button {
+  width: 100%;
+  text-align: center;
+}
 
 .progress-wrap { background: #e5e7eb; border-radius: 999px; height: 10px; overflow: hidden; margin-top: 8px; }
 .progress { background: var(--primary); height: 100%; width: 0%; }

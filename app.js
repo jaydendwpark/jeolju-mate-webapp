@@ -317,6 +317,11 @@ function renderHome() {
 
       ${addedLines ? `<div style="margin-top:10px">${addedLines}</div>` : `<p class="empty" style="margin:10px 0 0">아직 추가된 음주가 없어요.</p>`}
 
+      <label style="margin-top:14px">음주 추가</label>
+      <div class="quick-add-grid" id="quickAddButtons">
+        ${quickButtons.map((b)=>`<button class="ghost" data-add-type="${b.type}" data-add-amount="${b.amount}">${b.label}</button>`).join('')}
+      </div>
+
       <label style="margin-top:14px">감정 이모티콘</label>
       <div class="emoji-row" id="emojiRow">
         ${['🙂','😊','😌','😎','😵','🤢','😢','🥳'].map((e)=>`<button class="ghost emoji-btn ${state.draftEmoji===e?'active':''}" data-emoji="${e}">${e}</button>`).join('')}
@@ -324,11 +329,6 @@ function renderHome() {
 
       <label style="margin-top:12px">메모</label>
       <textarea id="memoInput" rows="2" placeholder="예: 친구들과 한잔, 회식 등">${state.draftMemo || ''}</textarea>
-
-      <label style="margin-top:14px">음주 추가</label>
-      <div class="row" id="quickAddButtons">
-        ${quickButtons.map((b)=>`<button class="ghost" data-add-type="${b.type}" data-add-amount="${b.amount}">${b.label}</button>`).join('')}
-      </div>
 
       <div class="row" style="margin-top:12px">
         <button class="primary" id="registerLog">등록</button>
@@ -422,11 +422,16 @@ function renderHome() {
     const ts = new Date(y, (m - 1), d, 12, 0, 0, 0).toISOString();
 
     const createdIds = [];
+    const batchId = 'batch-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const createdAt = new Date().toISOString();
+
     entries.forEach(([t, v]) => {
       const id = String(Date.now()) + '-' + t + '-' + Math.random().toString(36).slice(2, 7);
       createdIds.push(id);
       state.logs.push({
         id,
+        batchId,
+        createdAt,
         type: t,
         amount: Number(v),
         timestamp: ts,
@@ -464,85 +469,126 @@ function renderHome() {
 
 
 function renderHistory() {
-  const sorted = [...state.logs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const baseType = state.goalBaseType;
+  const baseInfo = ALCOHOL_UNITS[baseType];
 
-  if (!sorted.length) {
+  // 등록 건(batch) 기준으로 그룹화
+  const groups = new Map();
+  state.logs.forEach((log) => {
+    const key = log.batchId || `legacy-${log.id}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        timestamp: log.timestamp,
+        createdAt: log.createdAt || log.timestamp,
+        emoji: log.emoji || '',
+        memo: log.memo || '',
+        items: [],
+      });
+    }
+    const g = groups.get(key);
+    g.items.push(log);
+    // 그룹 메타 최신값 보정
+    if (log.createdAt && new Date(log.createdAt) > new Date(g.createdAt)) g.createdAt = log.createdAt;
+    if (log.emoji) g.emoji = log.emoji;
+    if (log.memo) g.memo = log.memo;
+  });
+
+  const grouped = [...groups.values()].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  if (!grouped.length) {
     view.innerHTML = `<section class="card"><p class="empty">기록이 없습니다.</p></section>`;
     return;
   }
 
-  const baseType = state.goalBaseType;
-  const baseInfo = ALCOHOL_UNITS[baseType];
-
   view.innerHTML = `
     <section class="card">
       <h2 class="title">기록 히스토리</h2>
-      <p class="sub">환산 단위는 ${baseInfo.name} 기준으로 표시됩니다.</p>
+      <p class="sub">등록 건 단위로 묶어서 표시됩니다. (${baseInfo.name} 기준 환산)</p>
       <div id="list"></div>
     </section>
   `;
 
   const list = document.getElementById('list');
 
-  sorted.forEach((l) => {
-    const info = ALCOHOL_UNITS[l.type];
-    const sojuUnits = toSojuUnits(l.amount, l.type);
-    const converted = fromSojuUnits(sojuUnits, baseType);
-
+  grouped.forEach((g) => {
     const el = document.createElement('div');
     el.className = 'list-item';
+
+    const itemLines = g.items
+      .map((l) => {
+        const info = ALCOHOL_UNITS[l.type];
+        const sojuUnits = toSojuUnits(l.amount, l.type);
+        const converted = fromSojuUnits(sojuUnits, baseType);
+        return `<div class="small">• ${info.name} ${l.amount}배 (환산 ${converted.toFixed(1)} ${baseInfo.name})</div>`;
+      })
+      .join('');
+
     el.innerHTML = `
       <div class="history-row">
         <div class="history-main">
-          <div><strong>${l.emoji ? l.emoji + ' ' : ''}${info.name}</strong> · ${l.amount}배</div>
-          <div class="small">${new Date(l.timestamp).toLocaleString('ko-KR')}</div>
-          <div class="small">환산: ${converted.toFixed(1)} ${baseInfo.name} 기준</div>
-          ${l.memo ? `<div class="small">메모: ${l.memo}</div>` : ''}
+          <div><strong>${g.emoji ? g.emoji + ' ' : ''}${new Date(g.timestamp).toLocaleDateString('ko-KR')} 기록</strong></div>
+          <div class="small">등록시각: ${new Date(g.createdAt).toLocaleString('ko-KR')}</div>
+          ${g.memo ? `<div class="small">메모: ${g.memo}</div>` : ''}
+          <div style="margin-top:6px">${itemLines}</div>
         </div>
         <div class="history-actions">
-          <button class="ghost btn-sm" data-edit-id="${l.id}">편집</button>
-          <button class="danger btn-sm" data-id="${l.id}">삭제</button>
+          <button class="ghost btn-sm" data-group-edit="${g.key}">편집</button>
+          <button class="danger btn-sm" data-group-del="${g.key}">삭제</button>
         </div>
       </div>
     `;
+
     list.appendChild(el);
   });
 
-  list.querySelectorAll('button[data-edit-id]').forEach((btn) => {
+  // 그룹 편집: 날짜/감정/메모 편집
+  list.querySelectorAll('button[data-group-edit]').forEach((btn) => {
     btn.onclick = () => {
-      const id = btn.dataset.editId;
-      const target = state.logs.find((l) => l.id === id);
+      const key = btn.dataset.groupEdit;
+      const target = grouped.find((g) => g.key === key);
       if (!target) return;
 
-      const nextAmountRaw = prompt('새 음주량(배수)을 입력해 주세요.', String(target.amount));
-      if (nextAmountRaw === null) return;
-      const nextAmount = Number(nextAmountRaw);
-      if (!nextAmount || nextAmount <= 0) return alert('음주량은 0보다 커야 합니다.');
+      const dateKey = formatDateKey(new Date(target.timestamp));
+      const nextDate = prompt('날짜(YYYY-MM-DD)를 입력해 주세요.', dateKey);
+      if (nextDate === null) return;
+      const dm = nextDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!dm) return alert('날짜 형식이 올바르지 않습니다. 예: 2026-03-06');
 
-      const currentDateKey = formatDateKey(new Date(target.timestamp));
-      const nextDateKey = prompt('날짜(YYYY-MM-DD)를 입력해 주세요.', currentDateKey);
-      if (nextDateKey === null) return;
+      const nextEmoji = prompt('감정 이모티콘을 입력해 주세요.', target.emoji || '🙂');
+      if (nextEmoji === null) return;
 
-      const m = nextDateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (!m) return alert('날짜 형식이 올바르지 않습니다. 예: 2026-03-06');
+      const nextMemo = prompt('메모를 입력해 주세요.', target.memo || '');
+      if (nextMemo === null) return;
 
-      const y = Number(m[1]);
-      const mo = Number(m[2]);
-      const d = Number(m[3]);
-      target.amount = nextAmount;
-      target.timestamp = new Date(y, mo - 1, d, 12, 0, 0, 0).toISOString();
+      const y = Number(dm[1]);
+      const mo = Number(dm[2]);
+      const d = Number(dm[3]);
+      const nextTs = new Date(y, mo - 1, d, 12, 0, 0, 0).toISOString();
+
+      state.logs.forEach((l) => {
+        const lKey = l.batchId || `legacy-${l.id}`;
+        if (lKey === key) {
+          l.timestamp = nextTs;
+          l.emoji = nextEmoji;
+          l.memo = nextMemo;
+        }
+      });
 
       saveState();
       render();
+      showToast('등록 건을 편집했습니다.');
     };
   });
 
-  list.querySelectorAll('button[data-id]').forEach((btn) => {
+  // 그룹 삭제
+  list.querySelectorAll('button[data-group-del]').forEach((btn) => {
     btn.onclick = () => {
-      const id = btn.dataset.id;
-      state.logs = state.logs.filter((l) => l.id !== id);
+      const key = btn.dataset.groupDel;
+      state.logs = state.logs.filter((l) => (l.batchId || `legacy-${l.id}`) !== key);
       saveState();
       render();
+      showToast('등록 건을 삭제했습니다.');
     };
   });
 }
