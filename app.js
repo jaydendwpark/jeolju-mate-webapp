@@ -2,7 +2,7 @@ const STORE_KEY = 'jeolju-mate-webapp-v3';
 
 const ALCOHOL_UNITS = {
   SOJU: { name: '소주', unit: 1.0, baseAmount: '1병(360ml)' },
-  BEER: { name: '맥주', unit: 0.38, baseAmount: '500ml' },
+  BEER: { name: '맥주', unit: 0.38, baseAmount: '1캔(500cc)' },
   CHEONGHA: { name: '청하', unit: 0.66, baseAmount: '1병(300ml)' },
   MAEHWASU: { name: '매화수', unit: 0.61, baseAmount: '1병(300ml)' },
   WINE: { name: '와인', unit: 1.52, baseAmount: '1병(750ml)' },
@@ -222,7 +222,7 @@ function renderOnboarding() {
       <label>기준 주종</label>
       <select id="goalBaseType">${typeOptions}</select>
 
-      <label>주간 목표 (기준 주종 단위)</label>
+      <label id="goalInputLabel">주간 목표 (${getUnitLabel(state.goalBaseType)} 단위)</label>
       <input id="goalInput" type="number" step="0.5" min="0.5" value="${defaultGoalInSelected.toFixed(1)}" />
 
       <div class="row" style="margin-top:12px">
@@ -234,12 +234,14 @@ function renderOnboarding() {
   `;
 
   const goalInput = document.getElementById('goalInput');
+  const goalInputLabel = document.getElementById('goalInputLabel');
   const baseTypeEl = document.getElementById('goalBaseType');
 
   baseTypeEl.onchange = () => {
     const newType = baseTypeEl.value;
     const currentSojuGoal = state.weeklyGoal;
     goalInput.value = fromSojuUnits(currentSojuGoal, newType).toFixed(1);
+    goalInputLabel.textContent = `주간 목표 (${getUnitLabel(newType)} 단위)`;
   };
 
   document.getElementById('minus').onclick = () => {
@@ -294,7 +296,7 @@ function renderHome() {
 
   const quickButtons = [
     { label: '소주 반병', type: 'SOJU', amount: 0.5 },
-    { label: '맥주 한캔', type: 'BEER', amount: 1 },
+    { label: '맥주 한캔(500cc)', type: 'BEER', amount: 1 },
     { label: '청하 반병', type: 'CHEONGHA', amount: 0.5 },
     { label: '매화수 반병', type: 'MAEHWASU', amount: 0.5 },
     { label: '와인 반병', type: 'WINE', amount: 0.5 },
@@ -551,7 +553,7 @@ function renderHistory() {
   view.innerHTML = `
     <section class="card">
       <h2 class="title">기록 히스토리</h2>
-      <p class="sub">등록 건 단위로 묶어서 표시됩니다. (${baseInfo.name} 기준 환산)</p>
+      <p class="sub">등록 건 단위로 묶어서 표시됩니다. (${baseInfo.name} ${getUnitLabel(baseType)} 기준 환산)</p>
       <div id="list"></div>
     </section>
   `;
@@ -567,7 +569,7 @@ function renderHistory() {
         const info = ALCOHOL_UNITS[l.type];
         const sojuUnits = toSojuUnits(l.amount, l.type);
         const converted = fromSojuUnits(sojuUnits, baseType);
-        return `<div class="small">• ${info.name} ${l.amount}${getUnitLabel(l.type)} (환산 ${converted.toFixed(1)} ${baseInfo.name})</div>`;
+        return `<div class="small">• ${info.name} ${l.amount}${getUnitLabel(l.type)} (환산 ${baseInfo.name} ${converted.toFixed(1)}${getUnitLabel(baseType)})</div>`;
       })
       .join('');
 
@@ -763,7 +765,7 @@ function renderSettings() {
       <label>기준 주종</label>
       <select id="settingsBaseType">${typeOptions}</select>
 
-      <label>주간 목표 (기준 주종 단위)</label>
+      <label id="settingsGoalLabel">주간 목표 (${getUnitLabel(state.goalBaseType)} 단위)</label>
       <input id="settingsGoal" type="number" step="0.5" min="0.5" value="${goalInBase.toFixed(1)}" />
 
       <div class="row" style="margin-top:12px">
@@ -772,10 +774,20 @@ function renderSettings() {
     </section>
   `;
 
+  const settingsBaseTypeEl = document.getElementById('settingsBaseType');
+  const settingsGoalEl = document.getElementById('settingsGoal');
+  const settingsGoalLabelEl = document.getElementById('settingsGoalLabel');
+
+  settingsBaseTypeEl.onchange = () => {
+    const newType = settingsBaseTypeEl.value;
+    settingsGoalEl.value = fromSojuUnits(state.weeklyGoal, newType).toFixed(1);
+    settingsGoalLabelEl.textContent = `주간 목표 (${getUnitLabel(newType)} 단위)`;
+  };
+
   document.getElementById('saveSettings').onclick = () => {
     const themeMode = document.getElementById('settingsThemeMode').value;
-    const baseType = document.getElementById('settingsBaseType').value;
-    const goalInSelected = Math.max(0.5, Number(document.getElementById('settingsGoal').value || 3));
+    const baseType = settingsBaseTypeEl.value;
+    const goalInSelected = Math.max(0.5, Number(settingsGoalEl.value || 3));
 
     state.themeMode = themeMode;
     state.goalBaseType = baseType;
