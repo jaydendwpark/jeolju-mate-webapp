@@ -312,7 +312,8 @@ function renderHome() {
       return `
         <div class="draft-chip">
           <div class="draft-chip-head">
-            <strong>${info.name} · ${Number(v).toFixed(1)}${getUnitLabel(t)}</strong>
+            <strong>${info.name}</strong>
+            <span class="draft-qty">${Number(v).toFixed(1)}${getUnitLabel(t)}</span>
             <button class="danger btn-sm" data-draft-del="${t}">삭제</button>
           </div>
           <div class="small">환산 ${converted.toFixed(2)}${baseUnitLabel}</div>
