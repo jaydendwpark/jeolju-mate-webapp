@@ -714,13 +714,13 @@ function renderStats() {
 
     <section class="card">
       <h3 class="title">최근 음주량</h3>
-      <div class="stats-dual">
-        <div class="list-item">
+      <div class="stats-dual" style="display:flex;gap:10px;flex-wrap:nowrap;">
+        <div class="list-item" style="flex:1;min-width:0;">
           <div class="small">최근 7일</div>
           <div class="big" style="font-size:26px">${fromSojuUnits(total7Soju, baseType).toFixed(2)}</div>
           <div class="small">${baseInfo.name} 기준</div>
         </div>
-        <div class="list-item">
+        <div class="list-item" style="flex:1;min-width:0;">
           <div class="small">최근 30일</div>
           <div class="big" style="font-size:26px">${fromSojuUnits(total30Soju, baseType).toFixed(2)}</div>
           <div class="small">${baseInfo.name} 기준</div>

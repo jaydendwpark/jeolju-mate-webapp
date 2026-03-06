@@ -182,11 +182,17 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 
 .quick-add-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 6px;
 }
-.quick-add-grid button { width: 100%; text-align: center; }
+.quick-add-grid button {
+  width: 100%;
+  text-align: center;
+  font-size: 13px;
+  padding: 9px 8px;
+  white-space: nowrap;
+}
 
 .progress-wrap {
   background: color-mix(in oklab, var(--card) 45%, #d1d5db);
@@ -266,6 +272,9 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
   }
   .top-nav {
     overflow-x: auto;
+  }
+  .quick-add-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
