@@ -107,6 +107,11 @@ main { padding: 18px 16px 20px; flex: 1; }
   font-weight: 700;
 }
 .warn-badge.danger { background: #fee2e2; color: #991b1b; }
+.warn-badge.danger.critical {
+  border: 1px solid #ef4444;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+  animation: criticalPulse 1s ease-in-out infinite;
+}
 .warn-badge.caution { background: #fff7ed; color: #9a3412; }
 
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -218,6 +223,11 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 .stats-row-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
 .stats-week-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
 .stats-day { width: 18px; font-weight: 600; color: var(--muted); }
+.stats-dual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
 
 .toast {
   position: fixed;
@@ -301,6 +311,21 @@ textarea:focus-visible {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes criticalPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    transform: scale(1);
   }
 }
 

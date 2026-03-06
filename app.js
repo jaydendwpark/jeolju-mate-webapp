@@ -335,7 +335,7 @@ function renderHome() {
       <div class="big">• ${baseInfo.name} ${todayLimit.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
       <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병</p>
       ${todayLimitSoju <= 0
-        ? `<div class="warn-badge danger">⚠️ 오늘 가능량이 0입니다. 추가 음주를 피하세요.</div>`
+        ? `<div class="warn-badge danger critical">⚠️ 오늘 가능량 0 · 음주 중단 권고</div>`
         : progress >= 90
           ? `<div class="warn-badge caution">주의: 주간 목표의 ${progress.toFixed(0)}%를 사용했어요.</div>`
           : ''}
@@ -714,13 +714,13 @@ function renderStats() {
 
     <section class="card">
       <h3 class="title">최근 음주량</h3>
-      <div class="row">
-        <div class="list-item" style="flex:1;min-width:180px;">
+      <div class="stats-dual">
+        <div class="list-item">
           <div class="small">최근 7일</div>
           <div class="big" style="font-size:26px">${fromSojuUnits(total7Soju, baseType).toFixed(2)}</div>
           <div class="small">${baseInfo.name} 기준</div>
         </div>
-        <div class="list-item" style="flex:1;min-width:180px;">
+        <div class="list-item">
           <div class="small">최근 30일</div>
           <div class="big" style="font-size:26px">${fromSojuUnits(total30Soju, baseType).toFixed(2)}</div>
           <div class="small">${baseInfo.name} 기준</div>
