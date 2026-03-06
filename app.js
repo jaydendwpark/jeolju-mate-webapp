@@ -46,6 +46,31 @@ function formatBaseAmount(baseAmount) {
   return `1${m[1]}=${m[2]}`;
 }
 
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function formatDateKey(date) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function buildAlcoholConversionList(baseType) {
+  const baseName = ALCOHOL_UNITS[baseType].name;
+  return Object.entries(ALCOHOL_UNITS)
+    .map(([k, v]) => {
+      const converted = fromSojuUnits(v.unit, baseType);
+      const baseUnitLabel = baseName === '와인' || baseName === '위스키' ? '잔' : '병';
+      return `<li>${v.name} ${v.baseAmount} ≈ ${converted.toFixed(2)}${baseUnitLabel}(${baseName} 기준)</li>`;
+    })
+    .join('');
+}
+
 function getTodayTotalSoju() {
   const today = new Date().toDateString();
   return state.logs
@@ -174,8 +199,38 @@ function renderHome() {
   const progress = Math.min(100, (rollingSoju / state.weeklyGoal) * 100 || 0);
   const todayLimitAsSojuBottles = todayLimitSoju.toFixed(1);
 
-  const alcoholButtons = Object.entries(ALCOHOL_UNITS)
-    .map(([k, v]) => `<button class="alcohol-btn ${state.draftType === k ? 'active' : ''}" data-type="${k}">${v.name}</button>`)
+  // Draft date: YYYY-MM-DD (default: 2 days ago)
+  if (!state.draftDate) {
+    state.draftDate = formatDateKey(addDays(new Date(), -2));
+    saveState();
+  }
+  if (!state.draftTotals) state.draftTotals = {};
+
+  const baseUnitLabel = baseInfo.name === '와인' || baseInfo.name === '위스키' ? '잔' : '병';
+
+  const quickButtons = [
+    { label: '소주 반병', type: 'SOJU', amount: 0.5 },
+    { label: '맥주 한캔', type: 'BEER', amount: 1 },
+    { label: '청하 반병', type: 'CHEONGHA', amount: 0.5 },
+    { label: '매화수 반병', type: 'MAEHWASU', amount: 0.5 },
+    { label: '와인 반병', type: 'WINE', amount: 0.5 },
+    { label: '막걸리 반병', type: 'MAKKOLI', amount: 0.5 },
+    { label: '위스키 한잔', type: 'WHISKEY', amount: 1 },
+  ];
+
+  const addedLines = Object.entries(state.draftTotals)
+    .filter(([, v]) => Number(v) > 0)
+    .map(([t, v]) => {
+      const info = ALCOHOL_UNITS[t];
+      const unitSoju = toSojuUnits(Number(v), t);
+      const converted = fromSojuUnits(unitSoju, baseType);
+      return `
+        <div class="list-item" style="margin-bottom:6px;">
+          <div><strong>${info.name}</strong> · ${Number(v).toFixed(1)}배</div>
+          <div class="small">환산: ${converted.toFixed(2)}${baseUnitLabel} (${baseInfo.name} 기준)</div>
+        </div>
+      `;
+    })
     .join('');
 
   view.innerHTML = `
@@ -183,11 +238,16 @@ function renderHome() {
       <div class="row" style="justify-content:flex-start;align-items:center;">
         <h2 class="title" style="margin:0">오늘 마실 수 있는 양</h2>
         <span class="info-inline">
-          <button class="info-btn" id="formulaInfoBtn" title="계산식 보기">i</button>
-          <span id="formulaInfoBox" class="info-pop-inline" style="display:none;">주간 목표 - (최근7일 누적 - 오늘 섭취)</span>
+          <button class="info-btn" id="formulaInfoBtn" title="계산식/환산표">i</button>
+          <span id="formulaInfoBox" class="info-pop-inline" style="display:none;">
+            <div class="info-title">계산식</div>
+            <div>주간 목표 - (최근7일 누적 - 오늘 섭취)</div>
+            <div class="info-title" style="margin-top:8px;">주종별 알콜 환산표</div>
+            <ul>${buildAlcoholConversionList(baseType)}</ul>
+          </span>
         </span>
       </div>
-      <div class="big">오늘 가능량: ${baseInfo.name} ${todayLimit.toFixed(1)}${baseInfo.name === '와인' || baseInfo.name === '위스키' ? '잔' : '병'} (${formatBaseAmount(baseInfo.baseAmount)})</div>
+      <div class="big">• ${baseInfo.name} ${todayLimit.toFixed(1)}${baseUnitLabel} (${formatBaseAmount(baseInfo.baseAmount)})</div>
       <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병</p>
     </section>
 
@@ -199,20 +259,31 @@ function renderHome() {
 
     <section class="card">
       <h2 class="title">월 누적</h2>
-      <div class="big" style="font-size:28px">${baseInfo.name} ${month.toFixed(1)}${baseInfo.name === '와인' || baseInfo.name === '위스키' ? '잔' : '병'} (${formatBaseAmount(baseInfo.baseAmount)})</div>
+      <div class="big" style="font-size:28px">${baseInfo.name} ${month.toFixed(1)}${baseUnitLabel} (${formatBaseAmount(baseInfo.baseAmount)})</div>
     </section>
 
     <section class="card">
-      <h2 class="title">음주 기록 추가</h2>
-      <label>술 종류 선택</label>
-      <div class="row" id="alcoholButtons">${alcoholButtons}</div>
-      <p class="sub" id="selectedAlcoholText" style="margin-top:8px">선택: ${ALCOHOL_UNITS[state.draftType].name}</p>
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h2 class="title" style="margin:0">음주 기록 추가</h2>
+        <div class="row" style="gap:6px;">
+          <button class="ghost" id="datePick">날짜 선택</button>
+          <button class="ghost" id="dateYesterday">어제</button>
+          <button class="ghost" id="dateToday">오늘</button>
+        </div>
+      </div>
+      <p class="sub">선택된 날짜: <strong>${state.draftDate}</strong></p>
+      <input id="dateInput" type="date" style="display:none;" />
 
-      <label>양 (배수)</label>
-      <input id="amountInput" type="number" min="0.1" step="0.1" value="1" />
+      ${addedLines ? `<div style="margin-top:10px">${addedLines}</div>` : `<p class="empty" style="margin:10px 0 0">아직 추가된 음주가 없어요.</p>`}
+
+      <label style="margin-top:14px">음주 추가</label>
+      <div class="row" id="quickAddButtons">
+        ${quickButtons.map((b)=>`<button class="ghost" data-add-type="${b.type}" data-add-amount="${b.amount}">${b.label}</button>`).join('')}
+      </div>
 
       <div class="row" style="margin-top:12px">
         <button class="primary" id="registerLog">등록</button>
+        <button class="danger" id="clearDraft">초기화</button>
       </div>
     </section>
   `;
@@ -223,30 +294,70 @@ function renderHome() {
     box.style.display = isHidden ? 'block' : 'none';
   };
 
-  document.querySelectorAll('.alcohol-btn').forEach((btn) => {
+  // Date controls
+  const dateInput = document.getElementById('dateInput');
+  const setDate = (d) => {
+    state.draftDate = formatDateKey(d);
+    saveState();
+    render();
+  };
+  document.getElementById('dateToday').onclick = () => setDate(new Date());
+  document.getElementById('dateYesterday').onclick = () => setDate(addDays(new Date(), -1));
+  document.getElementById('datePick').onclick = () => {
+    dateInput.style.display = 'block';
+    dateInput.value = state.draftDate;
+    dateInput.focus();
+    dateInput.showPicker?.();
+  };
+  dateInput.onchange = () => {
+    if (dateInput.value) {
+      state.draftDate = dateInput.value;
+      saveState();
+      render();
+    }
+  };
+
+  // Quick add buttons
+  document.querySelectorAll('button[data-add-type]').forEach((btn) => {
     btn.onclick = () => {
-      state.draftType = btn.dataset.type;
+      const t = btn.dataset.addType;
+      const a = Number(btn.dataset.addAmount);
+      state.draftTotals[t] = Number(state.draftTotals[t] || 0) + a;
       saveState();
       render();
     };
   });
 
-  document.getElementById('registerLog').onclick = () => {
-    const amount = Number(document.getElementById('amountInput').value);
-    if (!amount || amount <= 0) return alert('양을 올바르게 입력해 주세요.');
+  document.getElementById('clearDraft').onclick = () => {
+    state.draftTotals = {};
+    saveState();
+    render();
+  };
 
-    state.logs.push({
-      id: String(Date.now()),
-      type: state.draftType,
-      amount,
-      timestamp: new Date().toISOString(),
+  document.getElementById('registerLog').onclick = () => {
+    const entries = Object.entries(state.draftTotals || {}).filter(([, v]) => Number(v) > 0);
+    if (!entries.length) return alert('추가된 음주가 없습니다.');
+
+    // timestamp: selected date at 12:00 local time (avoid timezone surprises)
+    const [y, m, d] = state.draftDate.split('-').map(Number);
+    const ts = new Date(y, (m - 1), d, 12, 0, 0, 0).toISOString();
+
+    entries.forEach(([t, v]) => {
+      state.logs.push({
+        id: String(Date.now()) + '-' + t,
+        type: t,
+        amount: Number(v),
+        timestamp: ts,
+      });
     });
 
+    state.draftTotals = {};
     saveState();
     tab = 'history';
     render();
   };
 }
+
 
 function renderHistory() {
   const sorted = [...state.logs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
