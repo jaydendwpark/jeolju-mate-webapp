@@ -13,11 +13,14 @@
           <h1>절주메이트</h1>
           <span class="badge">Web MVP</span>
         </div>
-        <nav class="top-nav" id="nav" hidden>
-          <button data-tab="home">홈</button>
-          <button data-tab="history">히스토리</button>
-          <button data-tab="settings">설정</button>
-        </nav>
+        <div class="topbar-right">
+          <nav class="top-nav" id="nav" hidden>
+            <button data-tab="home">🏠 홈</button>
+            <button data-tab="history">🕘 히스토리</button>
+            <button data-tab="settings">⚙️ 설정</button>
+          </nav>
+          <button id="themeToggle" class="theme-toggle" type="button" aria-label="테마 전환">🌙</button>
+        </div>
       </header>
 
       <main id="view"></main>

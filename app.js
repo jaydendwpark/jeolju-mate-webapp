@@ -17,10 +17,45 @@ let lastAddedLogIds = [];
 
 const view = document.getElementById('view');
 const nav = document.getElementById('nav');
+const themeToggle = document.getElementById('themeToggle');
+
+function getSystemTheme() {
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function getResolvedTheme() {
+  return state.themeMode === 'auto' ? getSystemTheme() : state.themeMode;
+}
+
+function applyTheme() {
+  const theme = getResolvedTheme();
+  document.documentElement.setAttribute('data-theme', theme);
+
+  if (themeToggle) {
+    const icon = theme === 'dark' ? '☀️' : '🌙';
+    themeToggle.textContent = icon;
+    themeToggle.title = `테마: ${state.themeMode} (${theme})`;
+  }
+}
+
+function cycleThemeMode() {
+  const order = ['auto', 'light', 'dark'];
+  const idx = order.indexOf(state.themeMode || 'auto');
+  state.themeMode = order[(idx + 1) % order.length];
+  saveState();
+  applyTheme();
+  showToast(`테마: ${state.themeMode}`);
+}
 
 function loadState() {
   const raw = localStorage.getItem(STORE_KEY);
-  if (raw) return JSON.parse(raw);
+  if (raw) {
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      themeMode: parsed.themeMode || 'auto',
+    };
+  }
   return {
     weeklyGoal: 3.0,
     goalBaseType: 'SOJU',
@@ -29,6 +64,7 @@ function loadState() {
     draftType: 'SOJU',
     draftEmoji: '🙂',
     draftMemo: '',
+    themeMode: 'auto',
   };
 }
 
@@ -604,7 +640,14 @@ function renderSettings() {
   view.innerHTML = `
     <section class="card">
       <h2 class="title">설정</h2>
-      <p class="sub">기준 주종과 주간 목표를 변경할 수 있어요.</p>
+      <p class="sub">기준 주종, 주간 목표, 화면 테마를 변경할 수 있어요.</p>
+
+      <label>화면 테마</label>
+      <select id="settingsThemeMode">
+        <option value="auto" ${state.themeMode === 'auto' ? 'selected' : ''}>자동 (시스템)</option>
+        <option value="light" ${state.themeMode === 'light' ? 'selected' : ''}>화이트 모드</option>
+        <option value="dark" ${state.themeMode === 'dark' ? 'selected' : ''}>다크 모드</option>
+      </select>
 
       <label>기준 주종</label>
       <select id="settingsBaseType">${typeOptions}</select>
@@ -619,16 +662,32 @@ function renderSettings() {
   `;
 
   document.getElementById('saveSettings').onclick = () => {
+    const themeMode = document.getElementById('settingsThemeMode').value;
     const baseType = document.getElementById('settingsBaseType').value;
     const goalInSelected = Math.max(0.5, Number(document.getElementById('settingsGoal').value || 3));
 
+    state.themeMode = themeMode;
     state.goalBaseType = baseType;
     state.weeklyGoal = toSojuUnits(goalInSelected, baseType);
 
     saveState();
+    applyTheme();
     tab = 'home';
     render();
+    showToast('설정을 저장했어요.');
   };
 }
 
+if (themeToggle) {
+  themeToggle.onclick = cycleThemeMode;
+}
+
+if (window.matchMedia) {
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  mq.addEventListener?.('change', () => {
+    if (state.themeMode === 'auto') applyTheme();
+  });
+}
+
+applyTheme();
 render();
