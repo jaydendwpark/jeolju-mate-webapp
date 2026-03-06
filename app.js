@@ -310,7 +310,7 @@ function renderHome() {
     MAKKOLI: { label: '막걸리 반병', amount: 0.5 },
     WHISKEY: { label: '위스키 한잔', amount: 1 },
     HIGHBALL: { label: '하이볼 한잔', amount: 1 },
-    SAKE: { label: '사케 한병', amount: 1 },
+    SAKE: { label: '사케 반병', amount: 0.5 },
   };
 
   const quickButtons = Object.entries(ALCOHOL_UNITS)
