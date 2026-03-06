@@ -382,6 +382,7 @@ function renderHome() {
           <button class="ghost date-btn" id="datePick">${state.draftDate}</button>
           <button class="ghost date-btn" id="dateYesterday">어제</button>
           <button class="ghost date-btn" id="dateToday">오늘</button>
+          <button class="primary" id="registerLogTop">등록</button>
         </div>
       </div>
       <input id="dateInput" type="date" style="display:none;" />
@@ -550,6 +551,8 @@ function renderHome() {
   };
 
   document.getElementById('registerLog').onclick = registerLog;
+  const registerLogTopBtn = document.getElementById('registerLogTop');
+  if (registerLogTopBtn) registerLogTopBtn.onclick = registerLog;
 }
 
 
