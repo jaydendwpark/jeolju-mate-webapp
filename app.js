@@ -3,6 +3,8 @@ const STORE_KEY = 'jeolju-mate-webapp-v2';
 const ALCOHOL_UNITS = {
   SOJU: { name: '소주', unit: 1.0, baseAmount: '1병(360ml)' },
   BEER: { name: '맥주', unit: 0.6, baseAmount: '500ml' },
+  CHEONGHA: { name: '청하', unit: 0.4, baseAmount: '1병(300ml)' },
+  MAEHWASU: { name: '매화수', unit: 0.5, baseAmount: '1병(300ml)' },
   WINE: { name: '와인', unit: 0.3, baseAmount: '1잔(150ml)' },
   MAKKOLI: { name: '막걸리', unit: 0.4, baseAmount: '1병(750ml)' },
   WHISKEY: { name: '위스키', unit: 0.2, baseAmount: '1잔(30ml)' },
