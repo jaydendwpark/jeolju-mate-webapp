@@ -12,6 +12,8 @@ const ALCOHOL_UNITS = {
 
 const state = loadState();
 let tab = 'home';
+let undoTimer = null;
+let lastAddedLogIds = [];
 
 const view = document.getElementById('view');
 const nav = document.getElementById('nav');
@@ -25,6 +27,8 @@ function loadState() {
     logs: [],
     isOnboarded: false,
     draftType: 'SOJU',
+    draftEmoji: '🙂',
+    draftMemo: '',
   };
 }
 
@@ -60,6 +64,37 @@ function formatDateKey(date) {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+
+function showToast(message, options = {}) {
+  const existing = document.getElementById('toast-msg');
+  if (existing) existing.remove();
+
+  const el = document.createElement('div');
+  el.id = 'toast-msg';
+  el.className = 'toast';
+
+  const text = document.createElement('span');
+  text.textContent = message;
+  el.appendChild(text);
+
+  if (options.actionLabel && typeof options.onAction === 'function') {
+    const btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.textContent = options.actionLabel;
+    btn.onclick = () => {
+      options.onAction();
+      el.remove();
+    };
+    el.appendChild(btn);
+  }
+
+  document.body.appendChild(el);
+
+  setTimeout(() => {
+    if (el.isConnected) el.remove();
+  }, options.durationMs ?? 1000);
+}
+
 function buildAlcoholConversionList(baseType) {
   const baseName = ALCOHOL_UNITS[baseType].name;
   return Object.entries(ALCOHOL_UNITS)
@@ -205,6 +240,8 @@ function renderHome() {
     saveState();
   }
   if (!state.draftTotals) state.draftTotals = {};
+  if (!state.draftEmoji) state.draftEmoji = '🙂';
+  if (typeof state.draftMemo !== 'string') state.draftMemo = '';
 
   const baseUnitLabel = baseInfo.name === '와인' || baseInfo.name === '위스키' ? '잔' : '병';
 
@@ -249,6 +286,11 @@ function renderHome() {
       </div>
       <div class="big">• ${baseInfo.name} ${todayLimit.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
       <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병</p>
+      ${todayLimitSoju <= 0
+        ? `<div class="warn-badge danger">⚠️ 오늘 가능량이 0입니다. 추가 음주를 피하세요.</div>`
+        : progress >= 90
+          ? `<div class="warn-badge caution">주의: 주간 목표의 ${progress.toFixed(0)}%를 사용했어요.</div>`
+          : ''}
     </section>
 
     <section class="card">
@@ -274,6 +316,14 @@ function renderHome() {
       <input id="dateInput" type="date" style="display:none;" />
 
       ${addedLines ? `<div style="margin-top:10px">${addedLines}</div>` : `<p class="empty" style="margin:10px 0 0">아직 추가된 음주가 없어요.</p>`}
+
+      <label style="margin-top:14px">감정 이모티콘</label>
+      <div class="emoji-row" id="emojiRow">
+        ${['🙂','😊','😌','😎','😵','🤢','😢','🥳'].map((e)=>`<button class="ghost emoji-btn ${state.draftEmoji===e?'active':''}" data-emoji="${e}">${e}</button>`).join('')}
+      </div>
+
+      <label style="margin-top:12px">메모</label>
+      <textarea id="memoInput" rows="2" placeholder="예: 친구들과 한잔, 회식 등">${state.draftMemo || ''}</textarea>
 
       <label style="margin-top:14px">음주 추가</label>
       <div class="row" id="quickAddButtons">
@@ -329,6 +379,21 @@ function renderHome() {
     }
   };
 
+  // Emoji and memo
+  document.querySelectorAll('button[data-emoji]').forEach((btn) => {
+    btn.onclick = () => {
+      state.draftEmoji = btn.dataset.emoji;
+      saveState();
+      render();
+    };
+  });
+
+  const memoInput = document.getElementById('memoInput');
+  memoInput.oninput = () => {
+    state.draftMemo = memoInput.value;
+    saveState();
+  };
+
   // Quick add buttons
   document.querySelectorAll('button[data-add-type]').forEach((btn) => {
     btn.onclick = () => {
@@ -342,6 +407,8 @@ function renderHome() {
 
   document.getElementById('clearDraft').onclick = () => {
     state.draftTotals = {};
+    state.draftMemo = '';
+    state.draftEmoji = '🙂';
     saveState();
     render();
   };
@@ -354,19 +421,44 @@ function renderHome() {
     const [y, m, d] = state.draftDate.split('-').map(Number);
     const ts = new Date(y, (m - 1), d, 12, 0, 0, 0).toISOString();
 
+    const createdIds = [];
     entries.forEach(([t, v]) => {
+      const id = String(Date.now()) + '-' + t + '-' + Math.random().toString(36).slice(2, 7);
+      createdIds.push(id);
       state.logs.push({
-        id: String(Date.now()) + '-' + t,
+        id,
         type: t,
         amount: Number(v),
         timestamp: ts,
+        emoji: state.draftEmoji,
+        memo: state.draftMemo?.trim() || '',
       });
     });
 
     state.draftTotals = {};
+    state.draftMemo = '';
     saveState();
-    tab = 'history';
     render();
+
+    lastAddedLogIds = createdIds;
+    if (undoTimer) clearTimeout(undoTimer);
+    showToast('등록되었습니다.', {
+      actionLabel: '되돌리기',
+      durationMs: 3000,
+      onAction: () => {
+        if (!lastAddedLogIds.length) return;
+        state.logs = state.logs.filter((l) => !lastAddedLogIds.includes(l.id));
+        lastAddedLogIds = [];
+        saveState();
+        render();
+        showToast('등록을 되돌렸습니다.');
+      },
+    });
+
+    undoTimer = setTimeout(() => {
+      lastAddedLogIds = [];
+      undoTimer = null;
+    }, 3000);
   };
 }
 
@@ -400,12 +492,17 @@ function renderHistory() {
     const el = document.createElement('div');
     el.className = 'list-item';
     el.innerHTML = `
-      <div><strong>${info.name}</strong> · ${l.amount}배</div>
-      <div class="small">${new Date(l.timestamp).toLocaleString('ko-KR')}</div>
-      <div class="small">환산: ${converted.toFixed(1)} ${baseInfo.name} 기준</div>
-      <div class="history-actions">
-        <button class="ghost btn-sm" data-edit-id="${l.id}">편집</button>
-        <button class="danger btn-sm" data-id="${l.id}">삭제</button>
+      <div class="history-row">
+        <div class="history-main">
+          <div><strong>${l.emoji ? l.emoji + ' ' : ''}${info.name}</strong> · ${l.amount}배</div>
+          <div class="small">${new Date(l.timestamp).toLocaleString('ko-KR')}</div>
+          <div class="small">환산: ${converted.toFixed(1)} ${baseInfo.name} 기준</div>
+          ${l.memo ? `<div class="small">메모: ${l.memo}</div>` : ''}
+        </div>
+        <div class="history-actions">
+          <button class="ghost btn-sm" data-edit-id="${l.id}">편집</button>
+          <button class="danger btn-sm" data-id="${l.id}">삭제</button>
+        </div>
       </div>
     `;
     list.appendChild(el);
