@@ -310,9 +310,9 @@ function renderHome() {
       const unitSoju = toSojuUnits(Number(v), t);
       const converted = fromSojuUnits(unitSoju, baseType);
       return `
-        <div class="list-item" style="margin-bottom:6px;">
+        <div class="draft-chip">
           <div><strong>${info.name}</strong> · ${Number(v).toFixed(1)}${getUnitLabel(t)}</div>
-          <div class="small">환산: ${converted.toFixed(2)}${baseUnitLabel} (${baseInfo.name} 기준)</div>
+          <div class="small">환산 ${converted.toFixed(2)}${baseUnitLabel}</div>
         </div>
       `;
     })
@@ -363,7 +363,7 @@ function renderHome() {
       </div>
       <input id="dateInput" type="date" style="display:none;" />
 
-      ${addedLines ? `<div style="margin-top:10px">${addedLines}</div>` : `<p class="empty" style="margin:10px 0 0">아직 추가된 음주가 없어요.</p>`}
+      ${addedLines ? `<div class="draft-chips" style="margin-top:10px">${addedLines}</div>` : `<p class="empty" style="margin:10px 0 0">아직 추가된 음주가 없어요.</p>`}
 
       <label style="margin-top:14px">음주 추가</label>
       <div class="quick-add-grid" id="quickAddButtons">
