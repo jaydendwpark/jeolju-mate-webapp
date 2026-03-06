@@ -205,6 +205,16 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
   padding: 10px;
   background: color-mix(in oklab, var(--card) 95%, transparent);
 }
+.draft-chip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.draft-chip .btn-sm {
+  padding: 4px 8px;
+}
 
 .progress-wrap {
   background: color-mix(in oklab, var(--card) 45%, #d1d5db);
@@ -289,7 +299,7 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .draft-chips {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

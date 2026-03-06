@@ -311,7 +311,10 @@ function renderHome() {
       const converted = fromSojuUnits(unitSoju, baseType);
       return `
         <div class="draft-chip">
-          <div><strong>${info.name}</strong> · ${Number(v).toFixed(1)}${getUnitLabel(t)}</div>
+          <div class="draft-chip-head">
+            <strong>${info.name} · ${Number(v).toFixed(1)}${getUnitLabel(t)}</strong>
+            <button class="danger btn-sm" data-draft-del="${t}">삭제</button>
+          </div>
           <div class="small">환산 ${converted.toFixed(2)}${baseUnitLabel}</div>
         </div>
       `;
@@ -448,6 +451,16 @@ function renderHome() {
       const t = btn.dataset.addType;
       const a = Number(btn.dataset.addAmount);
       state.draftTotals[t] = Number(state.draftTotals[t] || 0) + a;
+      saveState();
+      render();
+    };
+  });
+
+  // Delete each draft alcohol type
+  document.querySelectorAll('button[data-draft-del]').forEach((btn) => {
+    btn.onclick = () => {
+      const t = btn.dataset.draftDel;
+      delete state.draftTotals[t];
       saveState();
       render();
     };
