@@ -254,6 +254,18 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 
 .top-nav { display: flex; gap: 6px; }
 .top-nav button { padding: 8px 12px; font-size: 13px; }
+.record-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.date-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .date-btn {
   padding: 8px 10px;
   font-size: 12px;
@@ -261,12 +273,13 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 }
 
 .top-register-btn {
-  margin-left: 8px;
-  padding: 10px 16px;
+  margin-left: 2px;
+  padding: 10px 18px;
   min-height: 40px;
   font-size: 14px;
   border-radius: 12px;
   box-shadow: 0 6px 14px rgba(79, 70, 229, 0.28);
+  white-space: nowrap;
 }
 
 .top-nav button.active,
@@ -336,6 +349,15 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
   }
   .top-nav {
     overflow-x: auto;
+  }
+  .record-header-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .date-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
   .quick-add-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

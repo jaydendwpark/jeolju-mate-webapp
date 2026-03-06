@@ -378,10 +378,12 @@ function renderHome() {
     <section class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <h2 class="title" style="margin:0">음주 기록 추가</h2>
-        <div class="row" style="gap:6px;">
-          <button class="ghost date-btn" id="datePick">${state.draftDate}</button>
-          <button class="ghost date-btn" id="dateYesterday">어제</button>
-          <button class="ghost date-btn" id="dateToday">오늘</button>
+        <div class="record-header-actions">
+          <div class="row date-actions" style="gap:6px;">
+            <button class="ghost date-btn" id="datePick">${state.draftDate}</button>
+            <button class="ghost date-btn" id="dateYesterday">어제</button>
+            <button class="ghost date-btn" id="dateToday">오늘</button>
+          </div>
           <button class="primary top-register-btn" id="registerLogTop">등록</button>
         </div>
       </div>
