@@ -247,7 +247,7 @@ function renderHome() {
           </span>
         </span>
       </div>
-      <div class="big">• ${baseInfo.name} ${todayLimit.toFixed(1)}${baseUnitLabel} (${formatBaseAmount(baseInfo.baseAmount)})</div>
+      <div class="big">• ${baseInfo.name} ${todayLimit.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
       <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병</p>
     </section>
 
@@ -266,9 +266,9 @@ function renderHome() {
       <div class="row" style="justify-content:space-between;align-items:center;">
         <h2 class="title" style="margin:0">음주 기록 추가</h2>
         <div class="row" style="gap:6px;">
-          <button class="ghost" id="datePick">날짜 선택</button>
-          <button class="ghost" id="dateYesterday">어제</button>
-          <button class="ghost" id="dateToday">오늘</button>
+          <button class="ghost date-btn" id="datePick">${state.draftDate}</button>
+          <button class="ghost date-btn" id="dateYesterday">어제</button>
+          <button class="ghost date-btn" id="dateToday">오늘</button>
         </div>
       </div>
       <p class="sub">선택된 날짜: <strong>${state.draftDate}</strong></p>
@@ -296,19 +296,32 @@ function renderHome() {
 
   // Date controls
   const dateInput = document.getElementById('dateInput');
+  const todayKey = formatDateKey(new Date());
+  const yesterdayKey = formatDateKey(addDays(new Date(), -1));
+
+  const datePickBtn = document.getElementById('datePick');
+  const dateYesterdayBtn = document.getElementById('dateYesterday');
+  const dateTodayBtn = document.getElementById('dateToday');
+
+  datePickBtn.classList.toggle('active', state.draftDate !== todayKey && state.draftDate !== yesterdayKey);
+  dateYesterdayBtn.classList.toggle('active', state.draftDate === yesterdayKey);
+  dateTodayBtn.classList.toggle('active', state.draftDate === todayKey);
+
   const setDate = (d) => {
     state.draftDate = formatDateKey(d);
     saveState();
     render();
   };
-  document.getElementById('dateToday').onclick = () => setDate(new Date());
-  document.getElementById('dateYesterday').onclick = () => setDate(addDays(new Date(), -1));
-  document.getElementById('datePick').onclick = () => {
+
+  dateTodayBtn.onclick = () => setDate(new Date());
+  dateYesterdayBtn.onclick = () => setDate(addDays(new Date(), -1));
+  datePickBtn.onclick = () => {
     dateInput.style.display = 'block';
     dateInput.value = state.draftDate;
     dateInput.focus();
     dateInput.showPicker?.();
   };
+
   dateInput.onchange = () => {
     if (dateInput.value) {
       state.draftDate = dateInput.value;
