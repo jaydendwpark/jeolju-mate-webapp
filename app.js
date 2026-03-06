@@ -282,9 +282,9 @@ function renderHome() {
   const progress = Math.min(100, (rollingSoju / state.weeklyGoal) * 100 || 0);
   const todayLimitAsSojuBottles = todayLimitSoju.toFixed(1);
 
-  // Draft date: YYYY-MM-DD (default: 2 days ago)
+  // Draft date: YYYY-MM-DD (default: yesterday)
   if (!state.draftDate) {
-    state.draftDate = formatDateKey(addDays(new Date(), -2));
+    state.draftDate = formatDateKey(addDays(new Date(), -1));
     saveState();
   }
   if (!state.draftTotals) state.draftTotals = {};
