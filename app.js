@@ -32,8 +32,7 @@ function applyTheme() {
   document.documentElement.setAttribute('data-theme', theme);
 
   if (themeToggle) {
-    const icon = theme === 'dark' ? '☀️' : '🌙';
-    themeToggle.textContent = icon;
+    themeToggle.textContent = `테마 ${state.themeMode}`;
     themeToggle.title = `테마: ${state.themeMode} (${theme})`;
   }
 }
@@ -569,7 +568,7 @@ function renderHistory() {
         const info = ALCOHOL_UNITS[l.type];
         const sojuUnits = toSojuUnits(l.amount, l.type);
         const converted = fromSojuUnits(sojuUnits, baseType);
-        return `<div class="small">• ${info.name} ${l.amount}${getUnitLabel(l.type)} (환산 ${baseInfo.name} ${converted.toFixed(1)}${getUnitLabel(baseType)})</div>`;
+        return `<div class="small">• ${info.name} ${l.amount}${getUnitLabel(l.type)} (환산 ${baseInfo.name} ${converted.toFixed(2)}${getUnitLabel(baseType)})</div>`;
       })
       .join('');
 
@@ -678,7 +677,7 @@ function renderStats() {
             <span>${pct.toFixed(1)}%</span>
           </div>
           <div class="progress-wrap"><div class="progress" style="width:${pct}%"></div></div>
-          <div class="small">${inBase.toFixed(1)} ${baseInfo.name} 환산</div>
+          <div class="small">${inBase.toFixed(2)} ${baseInfo.name} 환산</div>
         </div>
       `;
     })
@@ -699,7 +698,7 @@ function renderStats() {
         <div class="stats-week-row">
           <span class="stats-day">${dayLabels[i]}</span>
           <div class="progress-wrap" style="flex:1"><div class="progress" style="width:${pct}%"></div></div>
-          <span class="small" style="min-width:80px;text-align:right;">${fromSojuUnits(v, baseType).toFixed(1)} ${baseInfo.name}</span>
+          <span class="small" style="min-width:80px;text-align:right;">${fromSojuUnits(v, baseType).toFixed(2)} ${baseInfo.name}</span>
         </div>
       `;
     })
@@ -718,12 +717,12 @@ function renderStats() {
       <div class="row">
         <div class="list-item" style="flex:1;min-width:180px;">
           <div class="small">최근 7일</div>
-          <div class="big" style="font-size:26px">${fromSojuUnits(total7Soju, baseType).toFixed(1)}</div>
+          <div class="big" style="font-size:26px">${fromSojuUnits(total7Soju, baseType).toFixed(2)}</div>
           <div class="small">${baseInfo.name} 기준</div>
         </div>
         <div class="list-item" style="flex:1;min-width:180px;">
           <div class="small">최근 30일</div>
-          <div class="big" style="font-size:26px">${fromSojuUnits(total30Soju, baseType).toFixed(1)}</div>
+          <div class="big" style="font-size:26px">${fromSojuUnits(total30Soju, baseType).toFixed(2)}</div>
           <div class="small">${baseInfo.name} 기준</div>
         </div>
       </div>
