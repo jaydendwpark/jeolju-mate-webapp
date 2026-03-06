@@ -254,6 +254,21 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 
 .top-nav { display: flex; gap: 6px; }
 .top-nav button { padding: 8px 12px; font-size: 13px; }
+.date-btn {
+  padding: 8px 10px;
+  font-size: 12px;
+  min-height: 34px;
+}
+
+.top-register-btn {
+  margin-left: 8px;
+  padding: 10px 16px;
+  min-height: 40px;
+  font-size: 14px;
+  border-radius: 12px;
+  box-shadow: 0 6px 14px rgba(79, 70, 229, 0.28);
+}
+
 .top-nav button.active,
 .date-btn.active,
 .alcohol-btn.active {
