@@ -57,6 +57,7 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
   position: sticky; bottom: 0;
 }
 .bottom-nav button.active { background: #e0e7ff; color: #3730a3; }
+.alcohol-btn.active { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
 
 .list-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-bottom: 8px; background: #fff; }
 .small { font-size: 13px; color: var(--muted); }

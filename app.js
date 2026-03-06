@@ -1,4 +1,4 @@
-const STORE_KEY = 'jeolju-mate-webapp-v2';
+const STORE_KEY = 'jeolju-mate-webapp-v3';
 
 const ALCOHOL_UNITS = {
   SOJU: { name: '소주', unit: 1.0, baseAmount: '1병(360ml)' },
@@ -19,7 +19,13 @@ const nav = document.getElementById('nav');
 function loadState() {
   const raw = localStorage.getItem(STORE_KEY);
   if (raw) return JSON.parse(raw);
-  return { weeklyGoal: 3.0, goalBaseType: 'SOJU', logs: [], isOnboarded: false };
+  return {
+    weeklyGoal: 3.0,
+    goalBaseType: 'SOJU',
+    logs: [],
+    isOnboarded: false,
+    draftType: 'SOJU',
+  };
 }
 
 function saveState() {
@@ -74,7 +80,6 @@ function render() {
   renderNav();
 
   if (tab === 'home') renderHome();
-  else if (tab === 'log') renderLog();
   else renderHistory();
 }
 
@@ -138,8 +143,10 @@ function renderOnboarding() {
     state.goalBaseType = baseType;
     state.weeklyGoal = toSojuUnits(goalInBase, baseType);
     state.isOnboarded = true;
+    if (!state.draftType) state.draftType = baseType;
 
     saveState();
+    tab = 'home';
     render();
   };
 }
@@ -159,15 +166,19 @@ function renderHome() {
 
   const progress = Math.min(100, (rollingSoju / state.weeklyGoal) * 100 || 0);
 
+  const alcoholButtons = Object.entries(ALCOHOL_UNITS)
+    .map(([k, v]) => `<button class="alcohol-btn ${state.draftType === k ? 'active' : ''}" data-type="${k}">${v.name}</button>`)
+    .join('');
+
   view.innerHTML = `
     <section class="card">
-      <h2 class="title">오늘 마실 수 있는 양</h2>
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h2 class="title" style="margin:0">오늘 마실 수 있는 양</h2>
+        <button class="ghost" id="goSettings">설정</button>
+      </div>
       <div class="big">${todayLimit.toFixed(1)} ${baseInfo.name} 기준</div>
       <p class="sub">기준 주종: ${baseInfo.name} (${baseInfo.baseAmount})</p>
       <p class="sub">계산식: 주간 목표 - (최근7일 누적 - 오늘 섭취)</p>
-      <div class="row" style="margin-top:8px">
-        <button class="ghost" id="changeBase">기준 변경</button>
-      </div>
     </section>
 
     <section class="card">
@@ -180,41 +191,43 @@ function renderHome() {
       <h2 class="title">월 누적</h2>
       <div class="big" style="font-size:28px">${month.toFixed(1)} ${baseInfo.name} 기준</div>
     </section>
-  `;
 
-  document.getElementById('changeBase').onclick = () => {
-    state.isOnboarded = false;
-    saveState();
-    render();
-  };
-}
-
-function renderLog() {
-  const options = Object.entries(ALCOHOL_UNITS)
-    .map(([k, v]) => `<option value="${k}">${v.name} (${v.baseAmount})</option>`)
-    .join('');
-
-  view.innerHTML = `
     <section class="card">
       <h2 class="title">음주 기록 추가</h2>
-      <label>주종</label>
-      <select id="type">${options}</select>
+      <label>술 종류 선택</label>
+      <div class="row" id="alcoholButtons">${alcoholButtons}</div>
+      <p class="sub" id="selectedAlcoholText" style="margin-top:8px">선택: ${ALCOHOL_UNITS[state.draftType].name}</p>
+
       <label>양 (배수)</label>
-      <input id="amount" type="number" min="0.1" step="0.1" value="1" />
-      <div class="row" style="margin-top:14px">
-        <button class="primary" id="saveLog">저장</button>
+      <input id="amountInput" type="number" min="0.1" step="0.1" value="1" />
+
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="registerLog">등록</button>
       </div>
     </section>
   `;
 
-  document.getElementById('saveLog').onclick = () => {
-    const type = document.getElementById('type').value;
-    const amount = Number(document.getElementById('amount').value);
+  document.getElementById('goSettings').onclick = () => {
+    state.isOnboarded = false;
+    saveState();
+    render();
+  };
+
+  document.querySelectorAll('.alcohol-btn').forEach((btn) => {
+    btn.onclick = () => {
+      state.draftType = btn.dataset.type;
+      saveState();
+      render();
+    };
+  });
+
+  document.getElementById('registerLog').onclick = () => {
+    const amount = Number(document.getElementById('amountInput').value);
     if (!amount || amount <= 0) return alert('양을 올바르게 입력해 주세요.');
 
     state.logs.push({
       id: String(Date.now()),
-      type,
+      type: state.draftType,
       amount,
       timestamp: new Date().toISOString(),
     });
