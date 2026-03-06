@@ -1,0 +1,212 @@
+const STORE_KEY = 'jeolju-mate-webapp-v1';
+
+const ALCOHOL_UNITS = {
+  SOJU: { name: '소주', unit: 1.0, baseAmount: '1병(360ml)' },
+  BEER: { name: '맥주', unit: 0.6, baseAmount: '500ml' },
+  WINE: { name: '와인', unit: 0.3, baseAmount: '1잔(150ml)' },
+  MAKKOLI: { name: '막걸리', unit: 0.4, baseAmount: '1병(750ml)' },
+  WHISKEY: { name: '위스키', unit: 0.2, baseAmount: '1잔(30ml)' },
+};
+
+const state = loadState();
+let tab = 'home';
+
+const view = document.getElementById('view');
+const nav = document.getElementById('nav');
+
+function loadState() {
+  const raw = localStorage.getItem(STORE_KEY);
+  if (raw) return JSON.parse(raw);
+  return { weeklyGoal: 3.0, logs: [], isOnboarded: false };
+}
+
+function saveState() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+}
+
+function getTodayTotal() {
+  const today = new Date().toDateString();
+  return state.logs
+    .filter((l) => new Date(l.timestamp).toDateString() === today)
+    .reduce((sum, l) => sum + ALCOHOL_UNITS[l.type].unit * l.amount, 0);
+}
+
+function getRolling7Total() {
+  const now = Date.now();
+  const cutoff = now - 7 * 24 * 60 * 60 * 1000;
+  return state.logs
+    .filter((l) => new Date(l.timestamp).getTime() >= cutoff)
+    .reduce((sum, l) => sum + ALCOHOL_UNITS[l.type].unit * l.amount, 0);
+}
+
+function getTodayLimit() {
+  const rolling = getRolling7Total();
+  const today = getTodayTotal();
+  return Math.max(0, state.weeklyGoal - (rolling - today));
+}
+
+function getMonthTotal() {
+  const d = new Date();
+  const first = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  return state.logs
+    .filter((l) => new Date(l.timestamp).getTime() >= first)
+    .reduce((sum, l) => sum + ALCOHOL_UNITS[l.type].unit * l.amount, 0);
+}
+
+function render() {
+  if (!state.isOnboarded) {
+    nav.hidden = true;
+    renderOnboarding();
+    return;
+  }
+
+  nav.hidden = false;
+  renderNav();
+
+  if (tab === 'home') renderHome();
+  else if (tab === 'log') renderLog();
+  else renderHistory();
+}
+
+function renderNav() {
+  nav.querySelectorAll('button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+    b.onclick = () => {
+      tab = b.dataset.tab;
+      render();
+    };
+  });
+}
+
+function renderOnboarding() {
+  view.innerHTML = `
+    <section class="card">
+      <h2 class="title">처음 설정</h2>
+      <p class="sub">주간 목표 음주량을 설정해 주세요.</p>
+      <label>주간 목표 (단위)</label>
+      <input id="goalInput" type="number" step="0.5" min="0.5" value="${state.weeklyGoal}" />
+      <div class="row" style="margin-top:12px">
+        <button class="ghost" id="minus">-0.5</button>
+        <button class="ghost" id="plus">+0.5</button>
+        <button class="primary" id="start">시작하기</button>
+      </div>
+    </section>
+  `;
+
+  const goalInput = document.getElementById('goalInput');
+  document.getElementById('minus').onclick = () => {
+    goalInput.value = Math.max(0.5, Number(goalInput.value || 0) - 0.5).toFixed(1);
+  };
+  document.getElementById('plus').onclick = () => {
+    goalInput.value = (Number(goalInput.value || 0) + 0.5).toFixed(1);
+  };
+  document.getElementById('start').onclick = () => {
+    state.weeklyGoal = Math.max(0.5, Number(goalInput.value || 3));
+    state.isOnboarded = true;
+    saveState();
+    render();
+  };
+}
+
+function renderHome() {
+  const todayLimit = getTodayLimit();
+  const rolling = getRolling7Total();
+  const month = getMonthTotal();
+  const progress = Math.min(100, (rolling / state.weeklyGoal) * 100 || 0);
+
+  view.innerHTML = `
+    <section class="card">
+      <h2 class="title">오늘 마실 수 있는 양</h2>
+      <div class="big">${todayLimit.toFixed(1)} 단위</div>
+      <p class="sub">계산식: 주간 목표 - (최근7일 누적 - 오늘 섭취)</p>
+    </section>
+
+    <section class="card">
+      <h2 class="title">주간 진행률</h2>
+      <p class="sub">${rolling.toFixed(1)} / ${state.weeklyGoal.toFixed(1)} 단위</p>
+      <div class="progress-wrap"><div class="progress" style="width:${progress}%"></div></div>
+    </section>
+
+    <section class="card">
+      <h2 class="title">월 누적</h2>
+      <div class="big" style="font-size:28px">${month.toFixed(1)} 단위</div>
+    </section>
+  `;
+}
+
+function renderLog() {
+  const options = Object.entries(ALCOHOL_UNITS)
+    .map(([k, v]) => `<option value="${k}">${v.name} (${v.baseAmount})</option>`)
+    .join('');
+
+  view.innerHTML = `
+    <section class="card">
+      <h2 class="title">음주 기록 추가</h2>
+      <label>주종</label>
+      <select id="type">${options}</select>
+      <label>양 (배수)</label>
+      <input id="amount" type="number" min="0.1" step="0.1" value="1" />
+      <div class="row" style="margin-top:14px">
+        <button class="primary" id="saveLog">저장</button>
+      </div>
+    </section>
+  `;
+
+  document.getElementById('saveLog').onclick = () => {
+    const type = document.getElementById('type').value;
+    const amount = Number(document.getElementById('amount').value);
+    if (!amount || amount <= 0) return alert('양을 올바르게 입력해 주세요.');
+
+    state.logs.push({
+      id: String(Date.now()),
+      type,
+      amount,
+      timestamp: new Date().toISOString(),
+    });
+    saveState();
+    tab = 'history';
+    render();
+  };
+}
+
+function renderHistory() {
+  const sorted = [...state.logs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  if (!sorted.length) {
+    view.innerHTML = `<section class="card"><p class="empty">기록이 없습니다.</p></section>`;
+    return;
+  }
+
+  view.innerHTML = `
+    <section class="card">
+      <h2 class="title">기록 히스토리</h2>
+      <div id="list"></div>
+    </section>
+  `;
+
+  const list = document.getElementById('list');
+  sorted.forEach((l) => {
+    const info = ALCOHOL_UNITS[l.type];
+    const unit = info.unit * l.amount;
+    const el = document.createElement('div');
+    el.className = 'list-item';
+    el.innerHTML = `
+      <div><strong>${info.name}</strong> · ${l.amount}배</div>
+      <div class="small">${new Date(l.timestamp).toLocaleString('ko-KR')}</div>
+      <div class="small">환산: ${unit.toFixed(1)} 단위</div>
+      <div style="margin-top:8px"><button class="danger" data-id="${l.id}">삭제</button></div>
+    `;
+    list.appendChild(el);
+  });
+
+  list.querySelectorAll('button[data-id]').forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.id;
+      state.logs = state.logs.filter((l) => l.id !== id);
+      saveState();
+      render();
+    };
+  });
+}
+
+render();
