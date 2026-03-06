@@ -1,16 +1,17 @@
 const STORE_KEY = 'jeolju-mate-webapp-v3';
 
-const ALCOHOL_UNITS = {
-  SOJU: { name: '소주', unit: 1.0, baseAmount: '1병(360ml)' },
-  BEER: { name: '맥주', unit: 0.38, baseAmount: '1캔(500cc)' },
-  CHEONGHA: { name: '청하', unit: 0.66, baseAmount: '1병(300ml)' },
-  MAEHWASU: { name: '매화수', unit: 0.61, baseAmount: '1병(300ml)' },
-  WINE: { name: '와인', unit: 1.52, baseAmount: '1병(750ml)' },
-  MAKKOLI: { name: '막걸리', unit: 0.76, baseAmount: '1병(750ml)' },
-  WHISKEY: { name: '위스키', unit: 0.2, baseAmount: '1잔(30ml)' },
+const BASE_ALCOHOL_UNITS = {
+  SOJU: { name: '소주', unit: 1.0, baseAmount: '1병(360ml)', unitLabel: '병' },
+  BEER: { name: '맥주', unit: 0.38, baseAmount: '1캔(500cc)', unitLabel: '캔' },
+  CHEONGHA: { name: '청하', unit: 0.66, baseAmount: '1병(300ml)', unitLabel: '병' },
+  MAEHWASU: { name: '매화수', unit: 0.61, baseAmount: '1병(300ml)', unitLabel: '병' },
+  WINE: { name: '와인', unit: 1.52, baseAmount: '1병(750ml)', unitLabel: '병' },
+  MAKKOLI: { name: '막걸리', unit: 0.76, baseAmount: '1병(750ml)', unitLabel: '병' },
+  WHISKEY: { name: '위스키', unit: 0.2, baseAmount: '1잔(30ml)', unitLabel: '잔' },
 };
 
 const state = loadState();
+let ALCOHOL_UNITS = getAlcoholUnits();
 let tab = 'home';
 let undoTimer = null;
 let lastAddedLogIds = [];
@@ -53,6 +54,8 @@ function loadState() {
     return {
       ...parsed,
       themeMode: parsed.themeMode || 'auto',
+      disabledTypes: parsed.disabledTypes || {},
+      customTypes: parsed.customTypes || {},
     };
   }
   return {
@@ -64,11 +67,24 @@ function loadState() {
     draftEmoji: '🙂',
     draftMemo: '',
     themeMode: 'auto',
+    disabledTypes: {},
+    customTypes: {},
   };
 }
 
 function saveState() {
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
+}
+
+function getAlcoholUnits() {
+  return {
+    ...BASE_ALCOHOL_UNITS,
+    ...(state.customTypes || {}),
+  };
+}
+
+function refreshAlcoholUnits() {
+  ALCOHOL_UNITS = getAlcoholUnits();
 }
 
 function toSojuUnits(amount, type) {
@@ -86,7 +102,7 @@ function formatBaseAmount(baseAmount) {
 }
 
 function getUnitLabel(type) {
-  return type === 'WHISKEY' ? '잔' : '병';
+  return ALCOHOL_UNITS[type]?.unitLabel || '병';
 }
 
 
@@ -143,6 +159,10 @@ function buildAlcoholConversionList(baseType) {
       return `<li>${v.name} ${v.baseAmount} ≈ ${converted.toFixed(2)}${baseUnitLabel}(${baseName} 기준)</li>`;
     })
     .join('');
+}
+
+function isTypeEnabled(type) {
+  return !state.disabledTypes?.[type];
 }
 
 function getTodayTotalSoju() {
@@ -293,15 +313,22 @@ function renderHome() {
 
   const baseUnitLabel = getUnitLabel(baseType);
 
-  const quickButtons = [
-    { label: '소주 반병', type: 'SOJU', amount: 0.5 },
-    { label: '맥주 한캔(500cc)', type: 'BEER', amount: 1 },
-    { label: '청하 반병', type: 'CHEONGHA', amount: 0.5 },
-    { label: '매화수 반병', type: 'MAEHWASU', amount: 0.5 },
-    { label: '와인 반병', type: 'WINE', amount: 0.5 },
-    { label: '막걸리 반병', type: 'MAKKOLI', amount: 0.5 },
-    { label: '위스키 한잔', type: 'WHISKEY', amount: 1 },
-  ];
+  const quickButtonMap = {
+    SOJU: { label: '소주 반병', amount: 0.5 },
+    BEER: { label: '맥주 한캔(500cc)', amount: 1 },
+    CHEONGHA: { label: '청하 반병', amount: 0.5 },
+    MAEHWASU: { label: '매화수 반병', amount: 0.5 },
+    WINE: { label: '와인 반병', amount: 0.5 },
+    MAKKOLI: { label: '막걸리 반병', amount: 0.5 },
+    WHISKEY: { label: '위스키 한잔', amount: 1 },
+  };
+
+  const quickButtons = Object.entries(ALCOHOL_UNITS)
+    .filter(([k]) => isTypeEnabled(k))
+    .map(([k, v]) => {
+      if (quickButtonMap[k]) return { ...quickButtonMap[k], type: k };
+      return { label: `${v.name} +1${getUnitLabel(k)}`, type: k, amount: 1 };
+    });
 
   const addedLines = Object.entries(state.draftTotals)
     .filter(([, v]) => Number(v) > 0)
@@ -312,8 +339,10 @@ function renderHome() {
       return `
         <div class="draft-chip">
           <div class="draft-chip-head">
-            <strong>${info.name}</strong>
-            <span class="draft-qty">${Number(v).toFixed(1)}${getUnitLabel(t)}</span>
+            <div class="draft-meta">
+              <strong>${info.name}</strong>
+              <span class="draft-qty">${Number(v).toFixed(1)}${getUnitLabel(t)}</span>
+            </div>
             <button class="danger btn-sm" data-draft-del="${t}">삭제</button>
           </div>
           <div class="small">환산 ${converted.toFixed(2)}${baseUnitLabel}</div>
@@ -757,29 +786,53 @@ function renderStats() {
 }
 
 function renderSettings() {
-  const typeOptions = Object.entries(ALCOHOL_UNITS)
+  const enabledEntries = Object.entries(ALCOHOL_UNITS).filter(([k]) => isTypeEnabled(k));
+  if (!enabledEntries.find(([k]) => k === state.goalBaseType)) {
+    state.goalBaseType = enabledEntries[0]?.[0] || 'SOJU';
+  }
+
+  const typeOptions = enabledEntries
     .map(([k, v]) => `<option value="${k}" ${state.goalBaseType === k ? 'selected' : ''}>${v.name} (${v.baseAmount})</option>`)
     .join('');
 
   const goalInBase = fromSojuUnits(state.weeklyGoal, state.goalBaseType);
 
+  const typeToggleButtons = Object.entries(ALCOHOL_UNITS)
+    .map(([k, v]) => `
+      <button class="${isTypeEnabled(k) ? 'primary' : 'ghost'}" data-type-toggle="${k}">${v.name} ${isTypeEnabled(k) ? 'ON' : 'OFF'}</button>
+    `)
+    .join('');
+
   view.innerHTML = `
     <section class="card">
       <h2 class="title">설정</h2>
-      <p class="sub">기준 주종, 주간 목표, 화면 테마를 변경할 수 있어요.</p>
-
-      <label>화면 테마</label>
-      <select id="settingsThemeMode">
-        <option value="auto" ${state.themeMode === 'auto' ? 'selected' : ''}>자동 (시스템)</option>
-        <option value="light" ${state.themeMode === 'light' ? 'selected' : ''}>화이트 모드</option>
-        <option value="dark" ${state.themeMode === 'dark' ? 'selected' : ''}>다크 모드</option>
-      </select>
+      <p class="sub">기준 주종과 주간 목표를 변경할 수 있어요.</p>
 
       <label>기준 주종</label>
       <select id="settingsBaseType">${typeOptions}</select>
 
       <label id="settingsGoalLabel">주간 목표 (${getUnitLabel(state.goalBaseType)} 단위)</label>
       <input id="settingsGoal" type="number" step="0.5" min="0.5" value="${goalInBase.toFixed(1)}" />
+
+      <label style="margin-top:14px;">주종 활성/비활성</label>
+      <div class="row" id="typeToggleRow">${typeToggleButtons}</div>
+
+      <label style="margin-top:14px;">주종 추가</label>
+      <input id="customTypeName" type="text" placeholder="예: 하이볼" />
+      <div class="row">
+        <input id="customTypeUnit" type="text" placeholder="기준량 예: 1잔(45ml)" style="flex:1;min-width:160px;" />
+        <select id="customTypeLabel" style="flex:0 0 120px;">
+          <option value="병">병 단위</option>
+          <option value="잔">잔 단위</option>
+          <option value="캔">캔 단위</option>
+        </select>
+      </div>
+      <input id="customTypeSojuUnit" type="number" step="0.01" min="0.01" placeholder="소주 환산값 예: 0.42" />
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="addCustomType">주종 추가</button>
+      </div>
+
+      <div id="customTypeList" class="small" style="margin-top:8px"></div>
 
       <div class="row" style="margin-top:12px">
         <button class="primary" id="saveSettings">저장</button>
@@ -797,17 +850,67 @@ function renderSettings() {
     settingsGoalLabelEl.textContent = `주간 목표 (${getUnitLabel(newType)} 단위)`;
   };
 
+  document.querySelectorAll('button[data-type-toggle]').forEach((btn) => {
+    btn.onclick = () => {
+      const t = btn.dataset.typeToggle;
+      const enabledCount = Object.keys(ALCOHOL_UNITS).filter((key) => isTypeEnabled(key)).length;
+      if (enabledCount <= 1 && isTypeEnabled(t)) {
+        showToast('최소 1개 주종은 활성 상태여야 해요.');
+        return;
+      }
+
+      state.disabledTypes[t] = isTypeEnabled(t);
+      saveState();
+      refreshAlcoholUnits();
+      render();
+    };
+  });
+
+  const customTypeList = document.getElementById('customTypeList');
+  const customRows = Object.entries(state.customTypes || {})
+    .map(([k, v]) => `<div class="list-item" style="padding:8px 10px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;"><span>${v.name} · ${v.baseAmount} · ${v.unit.toFixed(2)} 소주</span><button class="danger btn-sm" data-custom-del="${k}">삭제</button></div>`)
+    .join('');
+  customTypeList.innerHTML = customRows || '추가한 커스텀 주종이 없습니다.';
+
+  document.getElementById('addCustomType').onclick = () => {
+    const name = document.getElementById('customTypeName').value.trim();
+    const baseAmount = document.getElementById('customTypeUnit').value.trim();
+    const unitLabel = document.getElementById('customTypeLabel').value;
+    const unit = Number(document.getElementById('customTypeSojuUnit').value || 0);
+
+    if (!name || !baseAmount || unit <= 0) {
+      showToast('주종명/기준량/환산값을 입력해 주세요.');
+      return;
+    }
+
+    const key = `CUSTOM_${Date.now()}`;
+    state.customTypes[key] = { name, baseAmount, unit, unitLabel };
+    saveState();
+    refreshAlcoholUnits();
+    render();
+    showToast('주종이 추가됐어요.');
+  };
+
+  document.querySelectorAll('button[data-custom-del]').forEach((btn) => {
+    btn.onclick = () => {
+      const key = btn.dataset.customDel;
+      delete state.customTypes[key];
+      delete state.disabledTypes[key];
+      saveState();
+      refreshAlcoholUnits();
+      render();
+      showToast('주종을 삭제했어요.');
+    };
+  });
+
   document.getElementById('saveSettings').onclick = () => {
-    const themeMode = document.getElementById('settingsThemeMode').value;
     const baseType = settingsBaseTypeEl.value;
     const goalInSelected = Math.max(0.5, Number(settingsGoalEl.value || 3));
 
-    state.themeMode = themeMode;
     state.goalBaseType = baseType;
     state.weeklyGoal = toSojuUnits(goalInSelected, baseType);
 
     saveState();
-    applyTheme();
     tab = 'home';
     render();
     showToast('설정을 저장했어요.');
