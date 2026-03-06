@@ -213,6 +213,11 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 .unit-note { font-size: 14px; color: var(--muted); font-weight: 500; }
 .empty { color: var(--muted); text-align: center; padding: 20px 0; }
 
+.stats-row { margin-bottom: 12px; }
+.stats-row-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.stats-week-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.stats-day { width: 18px; font-weight: 600; color: var(--muted); }
+
 .toast {
   position: fixed;
   top: 16px;

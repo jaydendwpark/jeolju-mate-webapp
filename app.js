@@ -2,11 +2,11 @@ const STORE_KEY = 'jeolju-mate-webapp-v3';
 
 const ALCOHOL_UNITS = {
   SOJU: { name: '소주', unit: 1.0, baseAmount: '1병(360ml)' },
-  BEER: { name: '맥주', unit: 0.6, baseAmount: '500ml' },
-  CHEONGHA: { name: '청하', unit: 0.4, baseAmount: '1병(300ml)' },
-  MAEHWASU: { name: '매화수', unit: 0.5, baseAmount: '1병(300ml)' },
-  WINE: { name: '와인', unit: 0.3, baseAmount: '1잔(150ml)' },
-  MAKKOLI: { name: '막걸리', unit: 0.4, baseAmount: '1병(750ml)' },
+  BEER: { name: '맥주', unit: 0.38, baseAmount: '500ml' },
+  CHEONGHA: { name: '청하', unit: 0.66, baseAmount: '1병(300ml)' },
+  MAEHWASU: { name: '매화수', unit: 0.61, baseAmount: '1병(300ml)' },
+  WINE: { name: '와인', unit: 1.52, baseAmount: '1병(750ml)' },
+  MAKKOLI: { name: '막걸리', unit: 0.76, baseAmount: '1병(750ml)' },
   WHISKEY: { name: '위스키', unit: 0.2, baseAmount: '1잔(30ml)' },
 };
 
@@ -86,6 +86,10 @@ function formatBaseAmount(baseAmount) {
   return `1${m[1]}=${m[2]}`;
 }
 
+function getUnitLabel(type) {
+  return type === 'WHISKEY' ? '잔' : '병';
+}
+
 
 function addDays(date, days) {
   const d = new Date(date);
@@ -136,7 +140,7 @@ function buildAlcoholConversionList(baseType) {
   return Object.entries(ALCOHOL_UNITS)
     .map(([k, v]) => {
       const converted = fromSojuUnits(v.unit, baseType);
-      const baseUnitLabel = baseName === '와인' || baseName === '위스키' ? '잔' : '병';
+      const baseUnitLabel = getUnitLabel(baseType);
       return `<li>${v.name} ${v.baseAmount} ≈ ${converted.toFixed(2)}${baseUnitLabel}(${baseName} 기준)</li>`;
     })
     .join('');
@@ -183,6 +187,7 @@ function render() {
 
   if (tab === 'home') renderHome();
   else if (tab === 'history') renderHistory();
+  else if (tab === 'stats') renderStats();
   else renderSettings();
 }
 
@@ -279,7 +284,7 @@ function renderHome() {
   if (!state.draftEmoji) state.draftEmoji = '🙂';
   if (typeof state.draftMemo !== 'string') state.draftMemo = '';
 
-  const baseUnitLabel = baseInfo.name === '와인' || baseInfo.name === '위스키' ? '잔' : '병';
+  const baseUnitLabel = getUnitLabel(baseType);
 
   const quickButtons = [
     { label: '소주 반병', type: 'SOJU', amount: 0.5 },
@@ -556,7 +561,7 @@ function renderHistory() {
         const info = ALCOHOL_UNITS[l.type];
         const sojuUnits = toSojuUnits(l.amount, l.type);
         const converted = fromSojuUnits(sojuUnits, baseType);
-        return `<div class="small">• ${info.name} ${l.amount}배 (환산 ${converted.toFixed(1)} ${baseInfo.name})</div>`;
+        return `<div class="small">• ${info.name} ${l.amount}${getUnitLabel(l.type)} (환산 ${converted.toFixed(1)} ${baseInfo.name})</div>`;
       })
       .join('');
 
@@ -629,6 +634,106 @@ function renderHistory() {
   });
 }
 
+
+function renderStats() {
+  const baseType = state.goalBaseType;
+  const baseInfo = ALCOHOL_UNITS[baseType];
+
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const cutoff7 = now - 7 * dayMs;
+  const cutoff30 = now - 30 * dayMs;
+
+  const logs7 = state.logs.filter((l) => new Date(l.timestamp).getTime() >= cutoff7);
+  const logs30 = state.logs.filter((l) => new Date(l.timestamp).getTime() >= cutoff30);
+
+  const total7Soju = logs7.reduce((sum, l) => sum + toSojuUnits(l.amount, l.type), 0);
+  const total30Soju = logs30.reduce((sum, l) => sum + toSojuUnits(l.amount, l.type), 0);
+
+  const byTypeSoju = Object.fromEntries(Object.keys(ALCOHOL_UNITS).map((k) => [k, 0]));
+  logs30.forEach((l) => {
+    byTypeSoju[l.type] += toSojuUnits(l.amount, l.type);
+  });
+
+  const totalTypeSoju = Object.values(byTypeSoju).reduce((a, b) => a + b, 0);
+
+  const byTypeRows = Object.entries(byTypeSoju)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => {
+      const pct = totalTypeSoju > 0 ? (v / totalTypeSoju) * 100 : 0;
+      const inBase = fromSojuUnits(v, baseType);
+      return `
+        <div class="stats-row">
+          <div class="stats-row-head">
+            <strong>${ALCOHOL_UNITS[k].name}</strong>
+            <span>${pct.toFixed(1)}%</span>
+          </div>
+          <div class="progress-wrap"><div class="progress" style="width:${pct}%"></div></div>
+          <div class="small">${inBase.toFixed(1)} ${baseInfo.name} 환산</div>
+        </div>
+      `;
+    })
+    .join('');
+
+  const dayBuckets = [0, 0, 0, 0, 0, 0, 0];
+  logs30.forEach((l) => {
+    const d = new Date(l.timestamp).getDay();
+    dayBuckets[d] += toSojuUnits(l.amount, l.type);
+  });
+  const dayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+  const peak = Math.max(...dayBuckets, 0);
+
+  const weekdayRows = dayBuckets
+    .map((v, i) => {
+      const pct = peak > 0 ? (v / peak) * 100 : 0;
+      return `
+        <div class="stats-week-row">
+          <span class="stats-day">${dayLabels[i]}</span>
+          <div class="progress-wrap" style="flex:1"><div class="progress" style="width:${pct}%"></div></div>
+          <span class="small" style="min-width:80px;text-align:right;">${fromSojuUnits(v, baseType).toFixed(1)} ${baseInfo.name}</span>
+        </div>
+      `;
+    })
+    .join('');
+
+  const weeklyPct = Math.min(999, (getRolling7TotalSoju() / state.weeklyGoal) * 100 || 0);
+
+  view.innerHTML = `
+    <section class="card">
+      <h2 class="title">통계</h2>
+      <p class="sub">최근 기록 기반으로 패턴을 보여드려요.</p>
+    </section>
+
+    <section class="card">
+      <h3 class="title">최근 음주량</h3>
+      <div class="row">
+        <div class="list-item" style="flex:1;min-width:180px;">
+          <div class="small">최근 7일</div>
+          <div class="big" style="font-size:26px">${fromSojuUnits(total7Soju, baseType).toFixed(1)}</div>
+          <div class="small">${baseInfo.name} 기준</div>
+        </div>
+        <div class="list-item" style="flex:1;min-width:180px;">
+          <div class="small">최근 30일</div>
+          <div class="big" style="font-size:26px">${fromSojuUnits(total30Soju, baseType).toFixed(1)}</div>
+          <div class="small">${baseInfo.name} 기준</div>
+        </div>
+      </div>
+      <div class="small" style="margin-top:8px;">주간 목표 사용률: ${weeklyPct.toFixed(0)}%</div>
+      <div class="progress-wrap"><div class="progress" style="width:${Math.min(100, weeklyPct)}%"></div></div>
+    </section>
+
+    <section class="card">
+      <h3 class="title">주종별 비중 (최근 30일)</h3>
+      ${byTypeRows || '<p class="empty">아직 통계를 낼 기록이 없어요.</p>'}
+    </section>
+
+    <section class="card">
+      <h3 class="title">요일별 패턴 (최근 30일)</h3>
+      ${weekdayRows}
+    </section>
+  `;
+}
 
 function renderSettings() {
   const typeOptions = Object.entries(ALCOHOL_UNITS)
