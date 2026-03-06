@@ -379,6 +379,8 @@ function renderHome() {
       <div class="row" style="justify-content:space-between;align-items:center;">
         <h2 class="title" style="margin:0">음주 기록 추가</h2>
         <div class="row" style="gap:6px;">
+          <button class="primary" id="registerLogTop">등록</button>
+          <button class="danger" id="clearDraftTop">초기화</button>
           <button class="ghost date-btn" id="datePick">${state.draftDate}</button>
           <button class="ghost date-btn" id="dateYesterday">어제</button>
           <button class="ghost date-btn" id="dateToday">오늘</button>
@@ -401,12 +403,9 @@ function renderHome() {
       <label style="margin-top:12px">메모</label>
       <textarea id="memoInput" rows="2" placeholder="예: 친구들과 한잔, 회식 등">${state.draftMemo || ''}</textarea>
 
-      <div class="row" style="margin-top:12px;justify-content:space-between;">
-        <div class="row" style="margin:0;">
-          <button class="primary" id="registerLog">등록</button>
-          <button class="danger" id="clearDraft">초기화</button>
-        </div>
-        <button class="danger" id="resetSavedLogs">저장 초기화</button>
+      <div class="row" style="margin-top:12px;">
+        <button class="primary" id="registerLog">등록</button>
+        <button class="danger" id="clearDraft">초기화</button>
       </div>
     </section>
   `;
@@ -489,7 +488,7 @@ function renderHome() {
     };
   });
 
-  document.getElementById('clearDraft').onclick = () => {
+  const clearDraft = () => {
     state.draftTotals = {};
     state.draftMemo = '';
     state.draftEmoji = '🙂';
@@ -497,16 +496,11 @@ function renderHome() {
     render();
   };
 
-  document.getElementById('resetSavedLogs').onclick = () => {
-    const ok = confirm('저장된 음주 기록을 모두 삭제할까요?');
-    if (!ok) return;
-    state.logs = [];
-    saveState();
-    render();
-    showToast('저장된 기록을 초기화했어요.');
-  };
+  document.getElementById('clearDraft').onclick = clearDraft;
+  const clearDraftTopBtn = document.getElementById('clearDraftTop');
+  if (clearDraftTopBtn) clearDraftTopBtn.onclick = clearDraft;
 
-  document.getElementById('registerLog').onclick = () => {
+  const registerLog = () => {
     const entries = Object.entries(state.draftTotals || {}).filter(([, v]) => Number(v) > 0);
     if (!entries.length) return alert('추가된 음주가 없습니다.');
 
@@ -558,6 +552,10 @@ function renderHome() {
       undoTimer = null;
     }, 3000);
   };
+
+  document.getElementById('registerLog').onclick = registerLog;
+  const registerLogTopBtn = document.getElementById('registerLogTop');
+  if (registerLogTopBtn) registerLogTopBtn.onclick = registerLog;
 }
 
 
@@ -807,7 +805,10 @@ function renderSettings() {
 
   view.innerHTML = `
     <section class="card">
-      <h2 class="title">설정</h2>
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h2 class="title" style="margin:0;">설정</h2>
+        <button class="primary" id="saveSettings">저장</button>
+      </div>
       <p class="sub">기준 주종과 주간 목표를 변경할 수 있어요.</p>
 
       <label>기준 주종</label>
@@ -818,10 +819,6 @@ function renderSettings() {
 
       <label style="margin-top:14px;">주종 활성/비활성</label>
       <div class="row" id="typeToggleRow">${typeToggleButtons}</div>
-
-      <div class="row" style="margin-top:12px">
-        <button class="primary" id="saveSettings">저장</button>
-      </div>
     </section>
   `;
 
