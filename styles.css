@@ -207,10 +207,18 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 }
 .draft-chip-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 4px;
+}
+.draft-meta {
+  min-width: 0;
+  flex: 1;
+}
+.draft-meta strong {
+  display: block;
+  word-break: keep-all;
 }
 .draft-chip .btn-sm {
   padding: 5px 10px;
@@ -218,6 +226,7 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.01em;
+  flex-shrink: 0;
 }
 .draft-chip .btn-sm.danger {
   border: 1px solid color-mix(in oklab, #ef4444 55%, var(--border));
