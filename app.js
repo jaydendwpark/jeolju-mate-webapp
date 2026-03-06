@@ -311,7 +311,7 @@ function renderHome() {
       const converted = fromSojuUnits(unitSoju, baseType);
       return `
         <div class="list-item" style="margin-bottom:6px;">
-          <div><strong>${info.name}</strong> · ${Number(v).toFixed(1)}배</div>
+          <div><strong>${info.name}</strong> · ${Number(v).toFixed(1)}${getUnitLabel(t)}</div>
           <div class="small">환산: ${converted.toFixed(2)}${baseUnitLabel} (${baseInfo.name} 기준)</div>
         </div>
       `;
