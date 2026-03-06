@@ -401,9 +401,12 @@ function renderHome() {
       <label style="margin-top:12px">메모</label>
       <textarea id="memoInput" rows="2" placeholder="예: 친구들과 한잔, 회식 등">${state.draftMemo || ''}</textarea>
 
-      <div class="row" style="margin-top:12px">
-        <button class="primary" id="registerLog">등록</button>
-        <button class="danger" id="clearDraft">초기화</button>
+      <div class="row" style="margin-top:12px;justify-content:space-between;">
+        <div class="row" style="margin:0;">
+          <button class="primary" id="registerLog">등록</button>
+          <button class="danger" id="clearDraft">초기화</button>
+        </div>
+        <button class="danger" id="resetSavedLogs">저장 초기화</button>
       </div>
     </section>
   `;
@@ -492,6 +495,15 @@ function renderHome() {
     state.draftEmoji = '🙂';
     saveState();
     render();
+  };
+
+  document.getElementById('resetSavedLogs').onclick = () => {
+    const ok = confirm('저장된 음주 기록을 모두 삭제할까요?');
+    if (!ok) return;
+    state.logs = [];
+    saveState();
+    render();
+    showToast('저장된 기록을 초기화했어요.');
   };
 
   document.getElementById('registerLog').onclick = () => {
@@ -584,7 +596,7 @@ function renderHistory() {
 
   view.innerHTML = `
     <section class="card">
-      <h2 class="title">기록 히스토리</h2>
+      <h2 class="title">기록</h2>
       <p class="sub">등록 건 단위로 묶어서 표시됩니다. (${baseInfo.name} ${getUnitLabel(baseType)} 기준 환산)</p>
       <div id="list"></div>
     </section>
