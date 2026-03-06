@@ -40,6 +40,12 @@ function fromSojuUnits(sojuUnits, type) {
   return sojuUnits / ALCOHOL_UNITS[type].unit;
 }
 
+function formatBaseAmount(baseAmount) {
+  const m = String(baseAmount).match(/^1(잔|병)\((.+)\)$/);
+  if (!m) return baseAmount;
+  return `1${m[1]}=${m[2]}`;
+}
+
 function getTodayTotalSoju() {
   const today = new Date().toDateString();
   return state.logs
@@ -174,17 +180,15 @@ function renderHome() {
 
   view.innerHTML = `
     <section class="card">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <div class="row" style="align-items:center; gap:6px;">
-          <h2 class="title" style="margin:0">오늘 마실 수 있는 양</h2>
+      <div class="row" style="justify-content:flex-start;align-items:center;">
+        <h2 class="title" style="margin:0">오늘 마실 수 있는 양</h2>
+        <span class="info-inline">
           <button class="info-btn" id="formulaInfoBtn" title="계산식 보기">i</button>
-        </div>
-        <button class="ghost" id="goSettings">설정</button>
+          <span id="formulaInfoBox" class="info-pop-inline" style="display:none;">주간 목표 - (최근7일 누적 - 오늘 섭취)</span>
+        </span>
       </div>
-      <div class="big">오늘 가능량: ${baseInfo.name} 약 ${todayLimit.toFixed(1)}잔(병)</div>
-      <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병 기준</p>
-      <p class="sub">기준 주종: ${baseInfo.name} (${baseInfo.baseAmount})</p>
-      <div id="formulaInfoBox" class="info-pop" style="display:none;">계산식: 주간 목표 - (최근7일 누적 - 오늘 섭취)</div>
+      <div class="big">오늘 가능량: ${baseInfo.name} ${todayLimit.toFixed(1)}${baseInfo.name === '와인' || baseInfo.name === '위스키' ? '잔' : '병'} (${formatBaseAmount(baseInfo.baseAmount)})</div>
+      <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병</p>
     </section>
 
     <section class="card">
@@ -195,7 +199,7 @@ function renderHome() {
 
     <section class="card">
       <h2 class="title">월 누적</h2>
-      <div class="big" style="font-size:28px">${month.toFixed(1)} ${baseInfo.name} 기준</div>
+      <div class="big" style="font-size:28px">${baseInfo.name} ${month.toFixed(1)}${baseInfo.name === '와인' || baseInfo.name === '위스키' ? '잔' : '병'} (${formatBaseAmount(baseInfo.baseAmount)})</div>
     </section>
 
     <section class="card">
@@ -212,11 +216,6 @@ function renderHome() {
       </div>
     </section>
   `;
-
-  document.getElementById('goSettings').onclick = () => {
-    tab = 'settings';
-    render();
-  };
 
   document.getElementById('formulaInfoBtn').onclick = () => {
     const box = document.getElementById('formulaInfoBox');
