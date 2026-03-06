@@ -188,14 +188,20 @@ function render() {
   if (tab === 'home') renderHome();
   else if (tab === 'history') renderHistory();
   else if (tab === 'stats') renderStats();
-  else renderSettings();
+  else if (tab === 'settings') renderSettings();
+  else {
+    tab = 'home';
+    renderHome();
+  }
 }
 
 function renderNav() {
   nav.querySelectorAll('button').forEach((b) => {
-    b.classList.toggle('active', b.dataset.tab === tab);
+    const key = (b.dataset.tab || '').trim();
+    b.classList.toggle('active', key === tab);
     b.onclick = () => {
-      tab = b.dataset.tab;
+      if (!['home', 'history', 'stats', 'settings'].includes(key)) return;
+      tab = key;
       render();
     };
   });
