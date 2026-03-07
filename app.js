@@ -381,12 +381,10 @@ function renderHome() {
         <button class="primary top-register-btn" id="registerLogTop">등록</button>
       </div>
 
-      <div class="record-header-actions">
-        <div class="row date-actions" style="gap:6px;">
-          <button class="ghost date-btn" id="datePick">${state.draftDate}</button>
-          <button class="ghost date-btn" id="dateYesterday">어제</button>
-          <button class="ghost date-btn" id="dateToday">오늘</button>
-        </div>
+      <div class="row date-actions" style="margin-bottom:14px; gap:8px;">
+        <button class="ghost date-btn" id="datePick">${state.draftDate}</button>
+        <button class="ghost date-btn" id="dateYesterday">어제</button>
+        <button class="ghost date-btn" id="dateToday">오늘</button>
       </div>
       <input id="dateInput" type="date" style="display:none;" />
 
