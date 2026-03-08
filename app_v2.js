@@ -1426,11 +1426,6 @@ function renderStats() {
 
   view.innerHTML = `
     <section class="card">
-      <h2 class="title">통계</h2>
-      <p class="sub">최근 기록 기반으로 패턴을 보여드려요.</p>
-    </section>
-
-    <section class="card">
       <h3 class="title">최근 음주량</h3>
       <div class="stats-dual">
         <div class="list-item">
