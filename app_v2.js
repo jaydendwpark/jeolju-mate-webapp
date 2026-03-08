@@ -468,7 +468,7 @@ function renderHome() {
           </span>
         </span>
       </div>
-      <p class="sub">절주 목표 기준, 오늘은 이 한도를 넘기지 마세요.</p>
+      <p class="sub">절주 목표 기준, 이 한도를 넘기지 마세요.</p>
       <div class="big ${isTodayLimitExceeded ? 'danger-text' : ''}">• ${baseInfo.name} ${todayLimit.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
       <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병</p>
       ${todayLimitSoju <= 0
@@ -667,11 +667,14 @@ function renderHistory() {
   const baseInfo = ALCOHOL_UNITS[baseType];
 
   view.innerHTML = `
-    <section class="card" style="padding-top: 10px;">
+    <section class="history-switcher-wrap">
       <div class="row history-tab-header" role="tablist" aria-label="기록 보기 방식">
         <button class="ghost ${historySubTab === 'list' ? 'active' : ''}" id="switchToHistoryList" role="tab" aria-selected="${historySubTab === 'list'}">일별 보기</button>
         <button class="ghost ${historySubTab === 'calendar' ? 'active' : ''}" id="switchToHistoryCal" role="tab" aria-selected="${historySubTab === 'calendar'}">월간 보기</button>
       </div>
+    </section>
+
+    <section class="card history-content-card">
       <div id="historyContent"></div>
     </section>
 
@@ -1074,7 +1077,8 @@ function renderStats() {
   const baseType = state.goalBaseType;
   const baseInfo = ALCOHOL_UNITS[baseType];
 
-  const now = Date.now();
+  const nowDate = new Date();
+  const now = nowDate.getTime();
   const dayMs = 24 * 60 * 60 * 1000;
   const cutoff7 = now - 7 * dayMs;
   const cutoff30 = now - 30 * dayMs;
@@ -1132,7 +1136,8 @@ function renderStats() {
     })
     .join('');
 
-  const weeklyPct = Math.min(999, (getRolling7TotalSoju() / state.weeklyGoal) * 100 || 0);
+  const weeklyGoalSoju = Math.max(state.weeklyGoal, 0.0001);
+  const weeklyPct = Math.min(999, (getRolling7TotalSoju() / weeklyGoalSoju) * 100 || 0);
 
   const drinkingDays30 = new Set(logs30.map((l) => formatDateKey(new Date(l.timestamp)))).size;
   const dryDays30 = Math.max(0, 30 - drinkingDays30);
@@ -1144,22 +1149,214 @@ function renderStats() {
   });
   const sortedDayTotals30 = [...dayTotals30.entries()].sort((a, b) => b[1] - a[1]);
   const heaviestDay = sortedDayTotals30[0] || null;
+
+  const todayStart = new Date(nowDate);
+  todayStart.setHours(0, 0, 0, 0);
+  const startCurrentWeek = new Date(todayStart.getTime() - 6 * dayMs);
+  const startPreviousWeek = new Date(todayStart.getTime() - 13 * dayMs);
+  const endCurrentWeek = new Date(todayStart.getTime() + dayMs);
+
+  const currentWeekSoju = state.logs
+    .filter((l) => {
+      const ts = new Date(l.timestamp).getTime();
+      return ts >= startCurrentWeek.getTime() && ts < endCurrentWeek.getTime();
+    })
+    .reduce((sum, l) => sum + toSojuUnits(l.amount, l.type), 0);
+
+  const previousWeekSoju = state.logs
+    .filter((l) => {
+      const ts = new Date(l.timestamp).getTime();
+      return ts >= startPreviousWeek.getTime() && ts < startCurrentWeek.getTime();
+    })
+    .reduce((sum, l) => sum + toSojuUnits(l.amount, l.type), 0);
+
+  const weekComparePeak = Math.max(currentWeekSoju, previousWeekSoju, 0.0001);
+  const weekDeltaSoju = currentWeekSoju - previousWeekSoju;
+  const weekDeltaPct = previousWeekSoju > 0 ? (weekDeltaSoju / previousWeekSoju) * 100 : (currentWeekSoju > 0 ? 100 : 0);
+
+  const dayBudgetSoju = weeklyGoalSoju / 7;
+  const exceedDayCount30 = sortedDayTotals30.filter(([, total]) => total > dayBudgetSoju).length;
+  const exceedDayRate30 = (exceedDayCount30 / 30) * 100;
+  let maxExceedStreak30 = 0;
+  let currentExceedStreak = 0;
+  for (let i = 29; i >= 0; i--) {
+    const day = new Date(todayStart.getTime() - i * dayMs);
+    const key = formatDateKey(day);
+    const daySoju = dayTotals30.get(key) || 0;
+    if (daySoju > dayBudgetSoju) {
+      currentExceedStreak += 1;
+      maxExceedStreak30 = Math.max(maxExceedStreak30, currentExceedStreak);
+    } else {
+      currentExceedStreak = 0;
+    }
+  }
+
+  const recent14Days = [];
+  for (let i = 13; i >= 0; i--) {
+    const date = new Date(todayStart.getTime() - i * dayMs);
+    recent14Days.push({
+      key: formatDateKey(date),
+      label: `${date.getMonth() + 1}/${date.getDate()}`,
+      dow: dayLabels[date.getDay()],
+      total: dayTotals30.get(formatDateKey(date)) || 0,
+    });
+  }
+  const weekSlices = {
+    previous: recent14Days.slice(0, 7),
+    current: recent14Days.slice(7),
+  };
+  const compareDayPeak = Math.max(...recent14Days.map((item) => item.total), dayBudgetSoju, 0.0001);
+  const weeklyDayCompareRows = weekSlices.current
+    .map((item, idx) => {
+      const prevItem = weekSlices.previous[idx];
+      const delta = item.total - (prevItem?.total || 0);
+      return `
+        <div class="compare-day-row">
+          <div class="compare-day-meta">
+            <strong>${item.label}</strong>
+            <span>${item.dow}</span>
+          </div>
+          <div class="compare-day-bars">
+            <div class="compare-bar-track previous"><div class="compare-bar-fill" style="width:${((prevItem?.total || 0) / compareDayPeak) * 100}%"></div></div>
+            <div class="compare-bar-track current"><div class="compare-bar-fill" style="width:${(item.total / compareDayPeak) * 100}%"></div></div>
+          </div>
+          <div class="compare-day-value ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">
+            ${fromSojuUnits(item.total, baseType).toFixed(2)}
+            <span>${delta === 0 ? '변화 없음' : `${delta > 0 ? '+' : ''}${fromSojuUnits(delta, baseType).toFixed(2)}`}</span>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  const lateNightLogCount30 = logs30.filter((l) => {
+    const hour = new Date(l.timestamp).getHours();
+    return hour >= 22 || hour < 6;
+  }).length;
+  const lateNightRate30 = logs30.length ? (lateNightLogCount30 / logs30.length) * 100 : 0;
+  const eveningLogCount30 = logs30.filter((l) => {
+    const hour = new Date(l.timestamp).getHours();
+    return hour >= 18 && hour < 22;
+  }).length;
+  const eveningRate30 = logs30.length ? (eveningLogCount30 / logs30.length) * 100 : 0;
+
+  const weekendSoju30 = logs30
+    .filter((l) => {
+      const dow = new Date(l.timestamp).getDay();
+      return dow === 0 || dow === 6;
+    })
+    .reduce((sum, l) => sum + toSojuUnits(l.amount, l.type), 0);
+  const weekendRate30 = total30Soju > 0 ? (weekendSoju30 / total30Soju) * 100 : 0;
+
+  const heavyWeekdayIdx = dayBuckets.indexOf(Math.max(...dayBuckets));
+  const heavyWeekdayLabel = heavyWeekdayIdx >= 0 ? dayLabels[heavyWeekdayIdx] : '-';
+  const safeWeekCount = Math.max(1, Math.ceil(30 / 7));
+  const exceedPerWeek = exceedDayCount30 / safeWeekCount;
+  const recoveryScore = Math.max(0, Math.min(100, Math.round((dryDays30 / 30) * 45 + Math.max(0, 35 - exceedDayRate30) + Math.max(0, 20 - lateNightRate30 * 0.4))));
+  const riskScore = Math.min(100, Math.round(exceedDayRate30 * 1.15 + lateNightRate30 * 0.85 + weekendRate30 * 0.45 + eveningRate30 * 0.2 + maxExceedStreak30 * 8));
+  let riskLevel = '안정';
+  if (riskScore >= 65) riskLevel = '위험';
+  else if (riskScore >= 35) riskLevel = '주의';
+  const riskSignals = [];
+  if (exceedDayRate30 >= 30) riskSignals.push('목표 초과일이 잦음');
+  if (lateNightRate30 >= 35) riskSignals.push('야간 음주 비중 높음');
+  if (weekendRate30 >= 60) riskSignals.push('주말 집중 음주');
+  if (maxExceedStreak30 >= 3) riskSignals.push(`연속 초과 ${maxExceedStreak30}일`);
+  if (eveningRate30 >= 55) riskSignals.push('저녁 시간대 반복 음주');
+  const riskSummary = riskSignals.length ? riskSignals.join(' · ') : '뚜렷한 위험 신호 없음';
+  const riskBadges = [
+    { label: '목표 초과', value: `${exceedPerWeek.toFixed(1)}회/주`, tone: exceedPerWeek >= 2 ? 'danger' : exceedPerWeek >= 1 ? 'warn' : 'safe' },
+    { label: '야간 패턴', value: `${lateNightRate30.toFixed(0)}%`, tone: lateNightRate30 >= 35 ? 'danger' : lateNightRate30 >= 20 ? 'warn' : 'safe' },
+    { label: '주말 쏠림', value: `${weekendRate30.toFixed(0)}%`, tone: weekendRate30 >= 60 ? 'danger' : weekendRate30 >= 40 ? 'warn' : 'safe' },
+    { label: '회복 점수', value: `${recoveryScore}점`, tone: recoveryScore >= 70 ? 'safe' : recoveryScore >= 45 ? 'warn' : 'danger' },
+  ];
+  const riskBadgeRows = riskBadges
+    .map((badge) => `<div class="risk-badge ${badge.tone}"><span>${badge.label}</span><strong>${badge.value}</strong></div>`)
+    .join('');
+
   const monthlyBuckets = new Map();
   state.logs.forEach((l) => {
     const d = new Date(l.timestamp);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     monthlyBuckets.set(key, (monthlyBuckets.get(key) || 0) + toSojuUnits(l.amount, l.type));
   });
-  const recentMonthlyTotals = [...monthlyBuckets.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-4);
-  const monthlyPeak = Math.max(...recentMonthlyTotals.map(([, total]) => total), 0);
+  const currentMonthKey = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}`;
+  const previousMonthDate = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, 1);
+  const previousMonthKey = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonthSoju = monthlyBuckets.get(currentMonthKey) || 0;
+  const previousMonthSoju = monthlyBuckets.get(previousMonthKey) || 0;
+  const monthDeltaSoju = currentMonthSoju - previousMonthSoju;
+  const monthDeltaPct = previousMonthSoju > 0 ? (monthDeltaSoju / previousMonthSoju) * 100 : (currentMonthSoju > 0 ? 100 : 0);
+
+  const recentMonthKeys = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(nowDate.getFullYear(), nowDate.getMonth() - i, 1);
+    recentMonthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  const recentMonthlyTotals = recentMonthKeys.map((monthKey) => [monthKey, monthlyBuckets.get(monthKey) || 0]);
+  const monthlyPeak = Math.max(...recentMonthlyTotals.map(([, total]) => total), 0.0001);
+  const monthlyAverageSoju = recentMonthlyTotals.reduce((sum, [, total]) => sum + total, 0) / recentMonthlyTotals.length;
+  const bestMonthEntry = [...recentMonthlyTotals].sort((a, b) => a[1] - b[1]).find(([, total]) => total > 0) || recentMonthlyTotals[recentMonthlyTotals.length - 1];
+  const trendDirection = monthDeltaSoju < 0 ? '감소세' : monthDeltaSoju > 0 ? '증가세' : '유지';
+  const monthlyInsight = `${trendDirection} · 최근 6개월 평균 ${fromSojuUnits(monthlyAverageSoju, baseType).toFixed(2)} ${baseInfo.name}`;
   const monthlyTrendRows = recentMonthlyTotals
-    .map(([monthKey, total]) => `<div class="stats-week-row"><span class="stats-month">${monthKey}</span><div class="progress-wrap" style="flex:1"><div class="progress" style="width:${monthlyPeak > 0 ? (total / monthlyPeak) * 100 : 0}%"></div></div><span class="small" style="min-width:88px;text-align:right;">${fromSojuUnits(total, baseType).toFixed(2)} ${baseInfo.name}</span></div>`)
+    .map(([monthKey, total], index) => {
+      const prev = index > 0 ? recentMonthlyTotals[index - 1][1] : null;
+      const momPct = prev && prev > 0 ? ((total - prev) / prev) * 100 : null;
+      const tone = momPct === null ? '' : momPct > 0 ? 'up' : momPct < 0 ? 'down' : '';
+      return `<div class="stats-week-row"><span class="stats-month">${monthKey}</span><div class="progress-wrap" style="flex:1"><div class="progress" style="width:${(total / monthlyPeak) * 100}%"></div></div><span class="small ${tone}" style="min-width:126px;text-align:right;">${fromSojuUnits(total, baseType).toFixed(2)} ${baseInfo.name}${momPct === null ? '' : ` · ${momPct > 0 ? '+' : ''}${momPct.toFixed(0)}%`}</span></div>`;
+    })
     .join('');
 
   const premiumStatsSection = state.isPremium
     ? `
+      <section class="card premium-card premium-hero">
+        <div class="premium-hero-head">
+          <div>
+            <h3 class="title">👑 프리미엄 인사이트</h3>
+            <p class="sub">${riskSummary}</p>
+          </div>
+          <span class="premium-risk ${riskLevel === '위험' ? 'high' : riskLevel === '주의' ? 'mid' : 'low'}">${riskLevel} ${riskScore}점</span>
+        </div>
+        <div class="premium-hero-grid">
+          <div class="premium-hero-metric">
+            <span>목표 초과 빈도</span>
+            <strong>${exceedDayCount30}일</strong>
+            <em>주 평균 ${exceedPerWeek.toFixed(1)}회</em>
+          </div>
+          <div class="premium-hero-metric">
+            <span>회복 점수</span>
+            <strong>${recoveryScore}</strong>
+            <em>금주일 ${dryDays30}일 반영</em>
+          </div>
+          <div class="premium-hero-metric">
+            <span>집중 패턴</span>
+            <strong>${heavyWeekdayLabel}요일</strong>
+            <em>주말 ${weekendRate30.toFixed(0)}% / 야간 ${lateNightRate30.toFixed(0)}%</em>
+          </div>
+        </div>
+        <div class="premium-chip-row">
+          <div class="premium-chip">
+            <div class="small">연속 목표 초과</div>
+            <strong>${maxExceedStreak30}일</strong>
+          </div>
+          <div class="premium-chip">
+            <div class="small">야간 음주 비중</div>
+            <strong>${lateNightRate30.toFixed(0)}%</strong>
+          </div>
+          <div class="premium-chip">
+            <div class="small">저녁 음주 비중</div>
+            <strong>${eveningRate30.toFixed(0)}%</strong>
+          </div>
+        </div>
+      </section>
+
       <section class="card premium-card">
-        <h3 class="title">👑 프리미엄 인사이트</h3>
+        <div class="section-head-inline">
+          <h3 class="title">🎯 목표/위험 상세 통계</h3>
+          <span class="section-side-note">위험 점수 기반 자동 진단</span>
+        </div>
+        <div class="risk-badge-grid">${riskBadgeRows}</div>
         <div class="premium-stats-grid">
           <div class="list-item premium-stat">
             <div class="small">최근 30일 금주 성공일</div>
@@ -1170,6 +1367,16 @@ function renderStats() {
             <div class="big" style="font-size:26px">${fromSojuUnits(avgPerDrinkingDaySoju, baseType).toFixed(2)}</div>
             <div class="small">${baseInfo.name} 기준</div>
           </div>
+          <div class="list-item premium-stat">
+            <div class="small">주말 음주 비중</div>
+            <div class="big" style="font-size:26px">${weekendRate30.toFixed(0)}%</div>
+            <div class="small">총 음주량 대비</div>
+          </div>
+          <div class="list-item premium-stat">
+            <div class="small">집중 요일</div>
+            <div class="big" style="font-size:26px">${heavyWeekdayLabel}요일</div>
+            <div class="small">최근 30일 기준</div>
+          </div>
           <div class="list-item premium-stat premium-stat-wide">
             <div class="small">최근 30일 최고 음주일</div>
             <div class="big" style="font-size:24px">${heaviestDay ? heaviestDay[0] : '-'}</div>
@@ -1179,14 +1386,41 @@ function renderStats() {
       </section>
 
       <section class="card premium-card">
-        <h3 class="title">📈 월별 추이 (최근 4개월)</h3>
+        <div class="section-head-inline">
+          <h3 class="title">📊 지난주 vs 이번주 일자별 비교</h3>
+          <span class="section-side-note">같은 요일 흐름 비교</span>
+        </div>
+        <div class="compare-day-legend">
+          <span><i class="legend-dot previous"></i>지난주</span>
+          <span><i class="legend-dot current"></i>이번주</span>
+          <span><i class="legend-dot goal"></i>일일 목표선</span>
+        </div>
+        <div class="compare-goal-track"><div class="compare-goal-fill" style="width:${(dayBudgetSoju / compareDayPeak) * 100}%"></div></div>
+        <div class="compare-day-list">${weeklyDayCompareRows}</div>
+      </section>
+
+      <section class="card premium-card">
+        <div class="section-head-inline">
+          <h3 class="title">📈 월별 추이 (최근 6개월)</h3>
+          <span class="section-side-note">${monthlyInsight}</span>
+        </div>
+        <div class="premium-month-summary">
+          <div class="premium-chip">
+            <div class="small">이번 달 변화</div>
+            <strong>${monthDeltaSoju > 0 ? '+' : ''}${fromSojuUnits(monthDeltaSoju, baseType).toFixed(2)} ${baseInfo.name}</strong>
+          </div>
+          <div class="premium-chip">
+            <div class="small">가장 안정적이던 달</div>
+            <strong>${bestMonthEntry?.[0] || '-'}</strong>
+          </div>
+        </div>
         ${monthlyTrendRows || '<p class="empty">아직 추이를 계산할 기록이 없어요.</p>'}
       </section>
     `
     : `
       <section class="card premium-card premium-locked">
         <h3 class="title">👑 프리미엄 고급 통계</h3>
-        <p class="sub">금주 성공일, 음주한 날 평균, 최고 음주일, 월별 추이는 프리미엄에서 확인할 수 있어요.</p>
+        <p class="sub">주간 일자별 비교, 목표 초과 빈도/연속 초과, 위험 패턴(야간·주말·저녁), 회복 점수, 확장 월별 추이는 프리미엄에서 확인할 수 있어요.</p>
       </section>
     `;
 
@@ -1222,6 +1456,44 @@ function renderStats() {
     <section class="card">
       <h3 class="title">요일별 패턴 (최근 30일)</h3>
       ${weekdayRows}
+    </section>
+
+    <section class="card">
+      <h3 class="title">주간/월간 비교</h3>
+      <div class="stats-compare-group">
+        <div class="stats-compare">
+          <div class="stats-compare-head">
+            <strong>주간 비교</strong>
+            <span class="stats-delta ${weekDeltaSoju > 0 ? 'up' : weekDeltaSoju < 0 ? 'down' : ''}">${weekDeltaSoju > 0 ? '+' : ''}${fromSojuUnits(weekDeltaSoju, baseType).toFixed(2)} ${baseInfo.name} (${weekDeltaSoju > 0 ? '+' : ''}${weekDeltaPct.toFixed(0)}%)</span>
+          </div>
+          <div class="stats-week-row">
+            <span class="stats-month">이번 7일</span>
+            <div class="progress-wrap" style="flex:1"><div class="progress" style="width:${(currentWeekSoju / weekComparePeak) * 100}%"></div></div>
+            <span class="small" style="min-width:96px;text-align:right;">${fromSojuUnits(currentWeekSoju, baseType).toFixed(2)}</span>
+          </div>
+          <div class="stats-week-row">
+            <span class="stats-month">직전 7일</span>
+            <div class="progress-wrap" style="flex:1"><div class="progress" style="width:${(previousWeekSoju / weekComparePeak) * 100}%"></div></div>
+            <span class="small" style="min-width:96px;text-align:right;">${fromSojuUnits(previousWeekSoju, baseType).toFixed(2)}</span>
+          </div>
+        </div>
+        <div class="stats-compare">
+          <div class="stats-compare-head">
+            <strong>월간 비교</strong>
+            <span class="stats-delta ${monthDeltaSoju > 0 ? 'up' : monthDeltaSoju < 0 ? 'down' : ''}">${monthDeltaSoju > 0 ? '+' : ''}${fromSojuUnits(monthDeltaSoju, baseType).toFixed(2)} ${baseInfo.name} (${monthDeltaSoju > 0 ? '+' : ''}${monthDeltaPct.toFixed(0)}%)</span>
+          </div>
+          <div class="stats-week-row">
+            <span class="stats-month">이번 달</span>
+            <div class="progress-wrap" style="flex:1"><div class="progress" style="width:${(currentMonthSoju / Math.max(currentMonthSoju, previousMonthSoju, 0.0001)) * 100}%"></div></div>
+            <span class="small" style="min-width:96px;text-align:right;">${fromSojuUnits(currentMonthSoju, baseType).toFixed(2)}</span>
+          </div>
+          <div class="stats-week-row">
+            <span class="stats-month">지난 달</span>
+            <div class="progress-wrap" style="flex:1"><div class="progress" style="width:${(previousMonthSoju / Math.max(currentMonthSoju, previousMonthSoju, 0.0001)) * 100}%"></div></div>
+            <span class="small" style="min-width:96px;text-align:right;">${fromSojuUnits(previousMonthSoju, baseType).toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
     </section>
 
     ${premiumStatsSection}

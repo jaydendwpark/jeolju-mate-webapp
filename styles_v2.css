@@ -162,8 +162,16 @@ body {
 
 .history-lines { margin-top: 8px; display: grid; gap: 4px; }
 
+.history-switcher-wrap {
+  margin-bottom: 12px;
+}
+
+.history-content-card {
+  padding-top: 14px;
+}
+
 .history-tab-header {
-  margin-bottom: 16px;
+  margin-bottom: 0;
   border-bottom: 1px solid var(--border);
   padding-bottom: 8px;
 }
@@ -459,18 +467,140 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
   gap: 10px;
 }
 
+.stats-compare-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stats-compare {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: color-mix(in oklab, var(--card) 94%, transparent);
+}
+
+.stats-compare-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stats-delta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.stats-delta.up { color: #b91c1c; }
+.stats-delta.down { color: #047857; }
+
 .premium-card {
   border-color: color-mix(in oklab, var(--primary) 30%, var(--border));
+  background: linear-gradient(180deg, color-mix(in oklab, var(--card) 96%, rgba(99, 102, 241, 0.06)), color-mix(in oklab, var(--card) 92%, transparent));
 }
+
+.premium-hero {
+  background:
+    radial-gradient(circle at top right, color-mix(in oklab, var(--primary) 20%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in oklab, var(--primary-soft) 60%, var(--card)), color-mix(in oklab, var(--card) 92%, transparent));
+}
+
+.premium-hero-head,
+.section-head-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.section-side-note {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.premium-risk {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.premium-risk.low { background: rgba(34, 197, 94, 0.14); color: #15803d; border-color: rgba(34, 197, 94, 0.22); }
+.premium-risk.mid { background: rgba(245, 158, 11, 0.16); color: #b45309; border-color: rgba(245, 158, 11, 0.26); }
+.premium-risk.high { background: rgba(239, 68, 68, 0.16); color: #b91c1c; border-color: rgba(239, 68, 68, 0.26); }
 
 .premium-locked {
   background: linear-gradient(180deg, color-mix(in oklab, var(--primary-soft) 65%, var(--card)), color-mix(in oklab, var(--card) 96%, transparent));
 }
 
+.premium-hero-grid,
+.premium-chip-row,
+.risk-badge-grid,
+.premium-month-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.premium-hero-metric,
+.premium-chip,
+.risk-badge {
+  border: 1px solid color-mix(in oklab, var(--primary) 18%, var(--border));
+  border-radius: 14px;
+  padding: 12px;
+  background: color-mix(in oklab, var(--card) 92%, rgba(255,255,255,0.25));
+}
+
+.premium-hero-metric span,
+.risk-badge span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.premium-hero-metric strong,
+.risk-badge strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 24px;
+  color: var(--text);
+}
+
+.premium-hero-metric em {
+  display: block;
+  margin-top: 6px;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.premium-chip strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.risk-badge.warn { border-color: rgba(245, 158, 11, 0.32); }
+.risk-badge.danger { border-color: rgba(239, 68, 68, 0.32); }
+.risk-badge.safe { border-color: rgba(34, 197, 94, 0.28); }
+
 .premium-stats-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  margin-top: 12px;
 }
 
 .premium-stat {
@@ -480,6 +610,94 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 .premium-stat-wide {
   grid-column: 1 / -1;
 }
+
+.compare-day-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-right: 6px;
+}
+
+.legend-dot.previous { background: #94a3b8; }
+.legend-dot.current { background: var(--primary); }
+.legend-dot.goal { background: #f59e0b; }
+
+.compare-goal-track {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--border) 82%, transparent);
+  margin: 10px 0 14px;
+  overflow: hidden;
+}
+
+.compare-goal-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
+.compare-day-list {
+  display: grid;
+  gap: 10px;
+}
+
+.compare-day-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 92px;
+  gap: 10px;
+  align-items: center;
+}
+
+.compare-day-meta strong,
+.compare-day-value {
+  display: block;
+  font-size: 13px;
+}
+
+.compare-day-meta span,
+.compare-day-value span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.compare-day-bars {
+  display: grid;
+  gap: 6px;
+}
+
+.compare-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--border) 80%, transparent);
+  overflow: hidden;
+}
+
+.compare-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.compare-bar-track.previous .compare-bar-fill { background: linear-gradient(90deg, #cbd5e1, #94a3b8); }
+.compare-bar-track.current .compare-bar-fill { background: linear-gradient(90deg, color-mix(in oklab, var(--primary) 55%, #8b5cf6), var(--primary)); }
+
+.compare-day-value {
+  text-align: right;
+  font-weight: 700;
+}
+
+.compare-day-value.up,
+.small.up { color: #b91c1c; }
+.compare-day-value.down,
+.small.down { color: #15803d; }
 
 .stats-month {
   width: 68px;
@@ -564,6 +782,28 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
   }
   .draft-chips {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stats-compare-group {
+    grid-template-columns: 1fr;
+  }
+  .premium-chip-row,
+  .premium-hero-grid,
+  .risk-badge-grid,
+  .premium-month-summary,
+  .premium-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .premium-hero-head,
+  .section-head-inline,
+  .stats-compare-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .compare-day-row {
+    grid-template-columns: 1fr;
+  }
+  .compare-day-value {
+    text-align: left;
   }
 }
 
