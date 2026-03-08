@@ -384,6 +384,7 @@ function renderHome() {
 
   const progress = Math.min(100, (rollingSoju / state.weeklyGoal) * 100 || 0);
   const todayLimitAsSojuBottles = todayLimitSoju.toFixed(1);
+  const isTodayLimitExceeded = todayLimitSoju <= 0;
 
   if (!state.draftDate) {
     state.draftDate = formatDateKey(addDays(new Date(), -1));
@@ -454,7 +455,7 @@ function renderHome() {
       <div class="big" style="font-size:28px">${baseInfo.name} ${month.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
     </section>
 
-    <section class="card">
+    <section class="card ${isTodayLimitExceeded ? 'limit-card critical' : 'limit-card'}">
       <div class="row" style="justify-content:flex-start;align-items:center;">
         <h2 class="title" style="margin:0">오늘 음주 최대 한도</h2>
         <span class="info-inline">
@@ -468,10 +469,10 @@ function renderHome() {
         </span>
       </div>
       <p class="sub">절주 목표 기준, 오늘은 이 한도를 넘기지 마세요.</p>
-      <div class="big">• ${baseInfo.name} ${todayLimit.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
+      <div class="big ${isTodayLimitExceeded ? 'danger-text' : ''}">• ${baseInfo.name} ${todayLimit.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
       <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병</p>
       ${todayLimitSoju <= 0
-        ? `<div class="warn-badge danger critical">⚠️ 오늘 가능량 0 · 음주 중단 권고</div>`
+        ? `<div class="warn-badge danger critical">🚨 오늘 한도 초과 · 추가 음주 금지</div>`
         : progress >= 90
           ? `<div class="warn-badge caution">주의: 주간 목표의 ${progress.toFixed(0)}%를 사용했어요.</div>`
           : ''}
@@ -1133,6 +1134,62 @@ function renderStats() {
 
   const weeklyPct = Math.min(999, (getRolling7TotalSoju() / state.weeklyGoal) * 100 || 0);
 
+  const drinkingDays30 = new Set(logs30.map((l) => formatDateKey(new Date(l.timestamp)))).size;
+  const dryDays30 = Math.max(0, 30 - drinkingDays30);
+  const avgPerDrinkingDaySoju = drinkingDays30 ? total30Soju / drinkingDays30 : 0;
+  const dayTotals30 = new Map();
+  logs30.forEach((l) => {
+    const key = formatDateKey(new Date(l.timestamp));
+    dayTotals30.set(key, (dayTotals30.get(key) || 0) + toSojuUnits(l.amount, l.type));
+  });
+  const sortedDayTotals30 = [...dayTotals30.entries()].sort((a, b) => b[1] - a[1]);
+  const heaviestDay = sortedDayTotals30[0] || null;
+  const monthlyBuckets = new Map();
+  state.logs.forEach((l) => {
+    const d = new Date(l.timestamp);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    monthlyBuckets.set(key, (monthlyBuckets.get(key) || 0) + toSojuUnits(l.amount, l.type));
+  });
+  const recentMonthlyTotals = [...monthlyBuckets.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-4);
+  const monthlyPeak = Math.max(...recentMonthlyTotals.map(([, total]) => total), 0);
+  const monthlyTrendRows = recentMonthlyTotals
+    .map(([monthKey, total]) => `<div class="stats-week-row"><span class="stats-month">${monthKey}</span><div class="progress-wrap" style="flex:1"><div class="progress" style="width:${monthlyPeak > 0 ? (total / monthlyPeak) * 100 : 0}%"></div></div><span class="small" style="min-width:88px;text-align:right;">${fromSojuUnits(total, baseType).toFixed(2)} ${baseInfo.name}</span></div>`)
+    .join('');
+
+  const premiumStatsSection = state.isPremium
+    ? `
+      <section class="card premium-card">
+        <h3 class="title">👑 프리미엄 인사이트</h3>
+        <div class="premium-stats-grid">
+          <div class="list-item premium-stat">
+            <div class="small">최근 30일 금주 성공일</div>
+            <div class="big" style="font-size:26px">${dryDays30}일</div>
+          </div>
+          <div class="list-item premium-stat">
+            <div class="small">음주한 날 평균</div>
+            <div class="big" style="font-size:26px">${fromSojuUnits(avgPerDrinkingDaySoju, baseType).toFixed(2)}</div>
+            <div class="small">${baseInfo.name} 기준</div>
+          </div>
+          <div class="list-item premium-stat premium-stat-wide">
+            <div class="small">최근 30일 최고 음주일</div>
+            <div class="big" style="font-size:24px">${heaviestDay ? heaviestDay[0] : '-'}</div>
+            <div class="small">${heaviestDay ? `${fromSojuUnits(heaviestDay[1], baseType).toFixed(2)} ${baseInfo.name}` : '기록 없음'}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card premium-card">
+        <h3 class="title">📈 월별 추이 (최근 4개월)</h3>
+        ${monthlyTrendRows || '<p class="empty">아직 추이를 계산할 기록이 없어요.</p>'}
+      </section>
+    `
+    : `
+      <section class="card premium-card premium-locked">
+        <h3 class="title">👑 프리미엄 고급 통계</h3>
+        <p class="sub">금주 성공일, 음주한 날 평균, 최고 음주일, 월별 추이는 프리미엄에서 확인할 수 있어요.</p>
+      </section>
+    `;
+
   view.innerHTML = `
     <section class="card">
       <h2 class="title">통계</h2>
@@ -1166,6 +1223,8 @@ function renderStats() {
       <h3 class="title">요일별 패턴 (최근 30일)</h3>
       ${weekdayRows}
     </section>
+
+    ${premiumStatsSection}
   `;
 }
 
