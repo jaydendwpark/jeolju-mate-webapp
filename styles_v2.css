@@ -205,6 +205,22 @@ body {
   margin-bottom: 24px;
 }
 
+.history-date-heading {
+  margin-bottom: 10px;
+  padding-left: 4px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.history-date-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.history-entry-card {
+  margin-bottom: 0;
+}
+
 .list-item-nested {
   margin-top: -8px;
   border-top: none;

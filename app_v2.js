@@ -846,31 +846,33 @@ function renderHistoryList(container) {
 
     html += `
       <div class="history-date-group">
-        ${sortedBatches.map((g, idx) => {
-          const itemLines = g.items.map(l => {
-            const info = ALCOHOL_UNITS[l.type];
-            const converted = fromSojuUnits(toSojuUnits(l.amount, l.type), baseType);
-            return `<div class="small">• ${info.name} ${l.amount}${getUnitLabel(l.type)} (환산 ${baseInfo.name} ${converted.toFixed(2)}${getUnitLabel(baseType)})</div>`;
-          }).join('');
+        <div class="history-date-heading"><strong>${dateDisplay}</strong></div>
+        <div class="history-date-stack">
+          ${sortedBatches.map((g) => {
+            const itemLines = g.items.map(l => {
+              const info = ALCOHOL_UNITS[l.type];
+              const converted = fromSojuUnits(toSojuUnits(l.amount, l.type), baseType);
+              return `<div class="small">• ${info.name} ${l.amount}${getUnitLabel(l.type)} (환산 ${baseInfo.name} ${converted.toFixed(2)}${getUnitLabel(baseType)})</div>`;
+            }).join('');
 
-          const isFirstInDate = idx === 0;
-          return `
-            <div class="list-item ${!isFirstInDate ? 'list-item-nested' : ''}">
-              <div class="history-row">
-                <div class="history-main">
-                  ${isFirstInDate ? `<div><strong>${g.emoji || '🙂'} ${dateDisplay} 기록</strong></div>` : ''}
-                  <div class="small">등록시각: ${new Date(g.createdAt || g.timestamp).toLocaleString('ko-KR')}</div>
-                  ${g.memo ? `<div class="small">메모: ${g.memo}</div>` : ''}
-                  <div style="margin-top:6px">${itemLines}</div>
-                </div>
-                <div class="history-actions">
-                  <button class="ghost btn-sm" data-group-edit="${g.key}">편집</button>
-                  <button class="danger btn-sm" data-group-del="${g.key}">삭제</button>
+            return `
+              <div class="list-item history-entry-card">
+                <div class="history-row">
+                  <div class="history-main">
+                    <div><strong>${g.emoji || '🙂'} 기록</strong></div>
+                    <div class="small">등록시각: ${new Date(g.createdAt || g.timestamp).toLocaleString('ko-KR')}</div>
+                    ${g.memo ? `<div class="small">메모: ${g.memo}</div>` : ''}
+                    <div style="margin-top:6px">${itemLines}</div>
+                  </div>
+                  <div class="history-actions">
+                    <button class="ghost btn-sm" data-group-edit="${g.key}">편집</button>
+                    <button class="danger btn-sm" data-group-del="${g.key}">삭제</button>
+                  </div>
                 </div>
               </div>
-            </div>
-          `;
-        }).join('')}
+            `;
+          }).join('')}
+        </div>
       </div>
     `;
   });
