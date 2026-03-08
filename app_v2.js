@@ -456,7 +456,7 @@ function renderHome() {
 
     <section class="card">
       <div class="row" style="justify-content:flex-start;align-items:center;">
-        <h2 class="title" style="margin:0">오늘 더 마실 수 있는 양</h2>
+        <h2 class="title" style="margin:0">오늘 음주 최대 한도</h2>
         <span class="info-inline">
           <button class="info-btn" id="formulaInfoBtn" title="계산식/환산표">i</button>
           <span id="formulaInfoBox" class="info-pop-inline" style="display:none;">
@@ -467,6 +467,7 @@ function renderHome() {
           </span>
         </span>
       </div>
+      <p class="sub">절주 목표 기준, 오늘은 이 한도를 넘기지 마세요.</p>
       <div class="big">• ${baseInfo.name} ${todayLimit.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
       <p class="sub">환산: 소주 약 ${todayLimitAsSojuBottles}병</p>
       ${todayLimitSoju <= 0
