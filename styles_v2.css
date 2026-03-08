@@ -749,7 +749,7 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
 
 .toast {
   position: fixed;
-  top: 16px;
+  top: 72px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(17, 24, 39, 0.92);
