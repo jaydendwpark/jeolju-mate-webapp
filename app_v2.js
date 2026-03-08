@@ -55,18 +55,7 @@ function cycleThemeMode() {
 }
 
 function loadState() {
-  const raw = localStorage.getItem(STORE_KEY);
-  if (raw) {
-    const parsed = JSON.parse(raw);
-    return {
-      ...parsed,
-      themeMode: parsed.themeMode || 'auto',
-      disabledTypes: parsed.disabledTypes || {},
-      onboardedAt: parsed.onboardedAt || null,
-      isPremium: parsed.isPremium || false,
-    };
-  }
-  return {
+  const defaultState = {
     weeklyGoal: 3.0,
     goalBaseType: 'SOJU',
     logs: [],
@@ -79,6 +68,29 @@ function loadState() {
     themeMode: 'auto',
     disabledTypes: {},
   };
+
+  const raw = localStorage.getItem(STORE_KEY);
+  if (!raw) return defaultState;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const logs = Array.isArray(parsed.logs) ? parsed.logs : [];
+    const disabledTypes = parsed.disabledTypes && typeof parsed.disabledTypes === 'object' ? parsed.disabledTypes : {};
+
+    return {
+      ...defaultState,
+      ...parsed,
+      logs,
+      disabledTypes,
+      themeMode: ['auto', 'light', 'dark'].includes(parsed.themeMode) ? parsed.themeMode : 'auto',
+      onboardedAt: parsed.onboardedAt || null,
+      isPremium: Boolean(parsed.isPremium),
+    };
+  } catch (err) {
+    console.warn('Failed to parse saved app state. Falling back to defaults.', err);
+    localStorage.removeItem(STORE_KEY);
+    return defaultState;
+  }
 }
 
 function saveState() {
@@ -115,6 +127,18 @@ function formatDateKey(date) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function isValidDateKey(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+
+function toNoonIsoFromDateKey(dateKey) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0, 0).toISOString();
 }
 
 function getConsecutiveSobrietyDays() {
@@ -160,6 +184,8 @@ function showToast(message, options = {}) {
   const el = document.createElement('div');
   el.id = 'toast-msg';
   el.className = 'toast';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
 
   const text = document.createElement('span');
   text.textContent = message;
@@ -265,9 +291,14 @@ function render() {
 }
 
 function renderNav() {
+  nav.setAttribute('role', 'tablist');
   nav.querySelectorAll('button').forEach((b) => {
     const key = (b.dataset.tab || '').trim();
-    b.classList.toggle('active', key === tab);
+    const isActive = key === tab;
+    b.classList.toggle('active', isActive);
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(isActive));
+    b.setAttribute('aria-current', isActive ? 'page' : 'false');
     b.onclick = () => {
       if (!['home', 'history', 'stats', 'settings'].includes(key)) return;
       tab = key;
@@ -404,8 +435,24 @@ function renderHome() {
     })
     .join('');
 
+  const draftEntries = Object.entries(state.draftTotals).filter(([, v]) => Number(v) > 0);
+  const draftTotalSoju = draftEntries.reduce((sum, [type, amount]) => sum + toSojuUnits(Number(amount), type), 0);
+  const draftTotalInBase = fromSojuUnits(draftTotalSoju, baseType);
+  const hasDraftEntries = draftEntries.length > 0;
+
   view.innerHTML = `
     <div class="streak-line">연속 절주 성공 ${sobrietyStreak}일째 🔥</div>
+
+    <section class="card">
+      <h2 class="title">주간 진행률</h2>
+      <p class="sub">${rolling.toFixed(1)} / ${weeklyGoal.toFixed(1)} (${baseInfo.name} 기준)</p>
+      <div class="progress-wrap"><div class="progress" style="width:${progress}%"></div></div>
+    </section>
+
+    <section class="card">
+      <h2 class="title">월 누적</h2>
+      <div class="big" style="font-size:28px">${baseInfo.name} ${month.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
+    </section>
 
     <section class="card">
       <div class="row" style="justify-content:flex-start;align-items:center;">
@@ -414,7 +461,7 @@ function renderHome() {
           <button class="info-btn" id="formulaInfoBtn" title="계산식/환산표">i</button>
           <span id="formulaInfoBox" class="info-pop-inline" style="display:none;">
             <div class="info-title">계산식</div>
-            <div>주간 목표 - 최근 7일 누적</div>
+            <div>주간 목표 - 최근 7일 누적(오늘 포함)</div>
             <div class="info-title" style="margin-top:8px;">주종별 알콜 환산표</div>
             <ul>${buildAlcoholConversionList(baseType)}</ul>
           </span>
@@ -430,20 +477,9 @@ function renderHome() {
     </section>
 
     <section class="card">
-      <h2 class="title">주간 진행률</h2>
-      <p class="sub">${rolling.toFixed(1)} / ${weeklyGoal.toFixed(1)} (${baseInfo.name} 기준)</p>
-      <div class="progress-wrap"><div class="progress" style="width:${progress}%"></div></div>
-    </section>
-
-    <section class="card">
-      <h2 class="title">월 누적</h2>
-      <div class="big" style="font-size:28px">${baseInfo.name} ${month.toFixed(1)}${baseUnitLabel} <span class="unit-note">(${formatBaseAmount(baseInfo.baseAmount)})</span></div>
-    </section>
-
-    <section class="card">
       <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
         <h2 class="title" style="margin:0">음주 기록 추가</h2>
-        <button class="primary top-register-btn" id="registerLogTop">등록</button>
+        <button class="primary top-register-btn" id="registerLogTop" ${hasDraftEntries ? '' : 'disabled'} aria-disabled="${hasDraftEntries ? 'false' : 'true'}">등록</button>
       </div>
 
       <div class="row date-actions" style="margin-bottom:14px; gap:8px;">
@@ -454,6 +490,7 @@ function renderHome() {
       <input id="dateInput" type="date" style="display:none;" />
 
       ${addedLines ? `<div class="draft-chips" style="margin-top:10px">${addedLines}</div>` : `<p class="empty" style="margin:10px 0 0">아직 추가된 음주가 없어요.</p>`}
+      <p class="sub" style="margin-top:10px;">현재 초안 합계: ${baseInfo.name} ${draftTotalInBase.toFixed(2)}${baseUnitLabel} (소주 ${draftTotalSoju.toFixed(2)}병 환산)</p>
 
       <label style="margin-top:14px">음주 추가</label>
       <div class="quick-add-grid" id="quickAddButtons">
@@ -469,16 +506,22 @@ function renderHome() {
       <textarea id="memoInput" rows="2" placeholder="예: 친구들과 한잔, 회식 등">${state.draftMemo || ''}</textarea>
 
       <div class="row" style="margin-top:12px;">
-        <button class="primary" id="registerLog">등록</button>
+        <button class="primary" id="registerLog" ${hasDraftEntries ? '' : 'disabled'} aria-disabled="${hasDraftEntries ? 'false' : 'true'}">등록</button>
         <button class="danger" id="clearDraft">초기화</button>
       </div>
     </section>
   `;
 
-  document.getElementById('formulaInfoBtn').onclick = () => {
-    const box = document.getElementById('formulaInfoBox');
-    const isHidden = box.style.display === 'none';
-    box.style.display = isHidden ? 'block' : 'none';
+  const formulaInfoBtn = document.getElementById('formulaInfoBtn');
+  const formulaInfoBox = document.getElementById('formulaInfoBox');
+  formulaInfoBtn.setAttribute('aria-label', '계산식 및 환산표 보기');
+  formulaInfoBtn.setAttribute('aria-expanded', 'false');
+  formulaInfoBtn.setAttribute('aria-controls', 'formulaInfoBox');
+
+  formulaInfoBtn.onclick = () => {
+    const isHidden = formulaInfoBox.style.display === 'none';
+    formulaInfoBox.style.display = isHidden ? 'block' : 'none';
+    formulaInfoBtn.setAttribute('aria-expanded', String(isHidden));
   };
 
   const dateInput = document.getElementById('dateInput');
@@ -561,8 +604,11 @@ function renderHome() {
     const entries = Object.entries(state.draftTotals || {}).filter(([, v]) => Number(v) > 0);
     if (!entries.length) return alert('추가된 음주가 없습니다.');
 
-    const [y, m, d] = state.draftDate.split('-').map(Number);
-    const ts = new Date(y, (m - 1), d, 12, 0, 0, 0).toISOString();
+    if (!isValidDateKey(state.draftDate)) {
+      showToast('날짜 형식이 올바르지 않습니다.');
+      return;
+    }
+    const ts = toNoonIsoFromDateKey(state.draftDate);
 
     const createdIds = [];
     const batchId = 'batch-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
@@ -620,18 +666,18 @@ function renderHistory() {
 
   view.innerHTML = `
     <section class="card" style="padding-top: 10px;">
-      <div class="row history-tab-header">
-        <button class="ghost ${historySubTab === 'list' ? 'active' : ''}" id="switchToHistoryList">일별 보기</button>
-        <button class="ghost ${historySubTab === 'calendar' ? 'active' : ''}" id="switchToHistoryCal">월간 보기</button>
+      <div class="row history-tab-header" role="tablist" aria-label="기록 보기 방식">
+        <button class="ghost ${historySubTab === 'list' ? 'active' : ''}" id="switchToHistoryList" role="tab" aria-selected="${historySubTab === 'list'}">일별 보기</button>
+        <button class="ghost ${historySubTab === 'calendar' ? 'active' : ''}" id="switchToHistoryCal" role="tab" aria-selected="${historySubTab === 'calendar'}">월간 보기</button>
       </div>
       <div id="historyContent"></div>
     </section>
 
-    <div id="historyPopup" class="modal-overlay" style="display:none;">
-      <div class="modal-content card">
+    <div id="historyPopup" class="modal-overlay" style="display:none;" role="presentation">
+      <div class="modal-content card" role="dialog" aria-modal="true" aria-labelledby="popupDateTitle">
         <div class="row" style="justify-content:space-between;align-items:center;">
           <h3 class="title" id="popupDateTitle">기록</h3>
-          <button class="ghost btn-sm" id="closePopup">닫기</button>
+          <button class="ghost btn-sm" id="closePopup" aria-label="기록 팝업 닫기">닫기</button>
         </div>
         <div id="popupList" class="popup-list"></div>
       </div>
@@ -648,6 +694,105 @@ function renderHistory() {
   } else {
     renderHistoryList(historyContent);
   }
+}
+
+function openBatchEditModal(group, onSubmit) {
+  const typeOptions = Object.entries(ALCOHOL_UNITS)
+    .map(([key, info]) => `<option value="${key}">${info.name}</option>`)
+    .join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.setAttribute('role', 'presentation');
+  overlay.innerHTML = `
+    <div class="modal-content card edit-modal" role="dialog" aria-modal="true" aria-labelledby="batchEditTitle">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h3 class="title" id="batchEditTitle">기록 편집</h3>
+        <button class="ghost btn-sm" type="button" data-modal-close aria-label="편집 닫기">닫기</button>
+      </div>
+      <label for="editDateInput">날짜</label>
+      <input id="editDateInput" type="date" value="${group.dateKey}" />
+      <p class="small" id="editDateError" style="color:var(--danger);display:none;margin-top:6px;">유효한 날짜를 선택해 주세요.</p>
+
+      <label>음주 항목</label>
+      <div id="editItemsWrap" class="edit-items-wrap">
+        ${group.items.map((item, idx) => `
+          <div class="edit-item-row" data-edit-index="${idx}">
+            <select data-field="type">${typeOptions}</select>
+            <input data-field="amount" type="number" step="0.1" min="0" value="${Number(item.amount)}" />
+          </div>
+        `).join('')}
+      </div>
+      <p class="small" id="editItemsError" style="color:var(--danger);display:none;margin-top:6px;">주종과 음주량을 올바르게 입력해 주세요.</p>
+
+      <label for="editEmojiInput">이모티콘</label>
+      <input id="editEmojiInput" type="text" maxlength="2" value="${group.emoji || '🙂'}" />
+
+      <label for="editMemoInput">메모</label>
+      <textarea id="editMemoInput" rows="3" placeholder="메모를 입력하세요">${group.memo || ''}</textarea>
+
+      <div class="row" style="margin-top:12px;justify-content:flex-end;">
+        <button class="ghost" type="button" data-modal-close>취소</button>
+        <button class="primary" type="button" id="saveBatchEdit">저장</button>
+      </div>
+    </div>
+  `;
+
+  const closeModal = () => overlay.remove();
+
+  overlay.querySelectorAll('[data-modal-close]').forEach((btn) => {
+    btn.onclick = closeModal;
+  });
+  overlay.onclick = (e) => {
+    if (e.target === overlay) closeModal();
+  };
+  overlay.onkeydown = (e) => {
+    if (e.key === 'Escape') closeModal();
+  };
+
+  const dateInput = overlay.querySelector('#editDateInput');
+  const dateError = overlay.querySelector('#editDateError');
+  const itemsError = overlay.querySelector('#editItemsError');
+  const emojiInput = overlay.querySelector('#editEmojiInput');
+  const memoInput = overlay.querySelector('#editMemoInput');
+
+  group.items.forEach((item, idx) => {
+    const row = overlay.querySelector(`.edit-item-row[data-edit-index="${idx}"]`);
+    if (!row) return;
+    row.querySelector('[data-field="type"]').value = item.type;
+  });
+
+  overlay.querySelector('#saveBatchEdit').onclick = () => {
+    const nextDate = String(dateInput.value || '').trim();
+    if (!isValidDateKey(nextDate)) {
+      dateError.style.display = 'block';
+      dateInput.focus();
+      return;
+    }
+    dateError.style.display = 'none';
+
+    const items = [...overlay.querySelectorAll('.edit-item-row')].map((row) => ({
+      type: row.querySelector('[data-field="type"]').value,
+      amount: Number(row.querySelector('[data-field="amount"]').value || 0),
+    }));
+
+    if (!items.length || items.some((item) => !ALCOHOL_UNITS[item.type] || item.amount <= 0)) {
+      itemsError.style.display = 'block';
+      return;
+    }
+    itemsError.style.display = 'none';
+
+    onSubmit({
+      dateKey: nextDate,
+      emoji: String(emojiInput.value || '🙂').trim() || '🙂',
+      memo: String(memoInput.value || '').trim(),
+      items,
+    });
+    closeModal();
+  };
+
+  document.body.appendChild(overlay);
+  dateInput.focus();
 }
 
 function renderHistoryList(container) {
@@ -727,23 +872,30 @@ function renderHistoryList(container) {
       const log = state.logs.find(l => (l.batchId || `legacy-${l.id}`) === key);
       if (!log) return;
 
-      const dateKey = formatDateKey(new Date(log.timestamp));
-      const nextDate = prompt('날짜(YYYY-MM-DD)를 입력해 주세요.', dateKey);
-      if (!nextDate) return;
-      
-      const nextEmoji = prompt('이모티콘', log.emoji || '🙂');
-      const nextMemo = prompt('메모', log.memo || '');
+      const groupLogs = state.logs.filter(l => (l.batchId || `legacy-${l.id}`) === key);
 
-      state.logs.forEach(l => {
-        if ((l.batchId || `legacy-${l.id}`) === key) {
-          const [y, m, d] = nextDate.split('-').map(Number);
-          l.timestamp = new Date(y, m - 1, d, 12, 0, 0, 0).toISOString();
-          l.emoji = nextEmoji;
-          l.memo = nextMemo;
-        }
-      });
-      saveState();
-      render();
+      openBatchEditModal(
+        {
+          dateKey: formatDateKey(new Date(log.timestamp)),
+          emoji: log.emoji || '🙂',
+          memo: log.memo || '',
+          items: groupLogs.map(item => ({ id: item.id, type: item.type, amount: item.amount })),
+        },
+        ({ dateKey, emoji, memo, items }) => {
+          const nextTs = toNoonIsoFromDateKey(dateKey);
+          groupLogs.forEach((entry, idx) => {
+            const nextItem = items[idx];
+            if (!nextItem) return;
+            entry.timestamp = nextTs;
+            entry.emoji = emoji;
+            entry.memo = memo;
+            entry.type = nextItem.type;
+            entry.amount = nextItem.amount;
+          });
+          saveState();
+          render();
+        },
+      );
     };
   });
 
@@ -791,7 +943,7 @@ function renderHistoryCalendar(container) {
       else level = 4;
     }
     calendarHtml += `
-      <div class="cal-day current ${level ? 'has-data level-'+level : ''}" data-cal-key="${key}">
+      <div class="cal-day current ${level ? 'has-data level-'+level : ''}" data-cal-key="${key}" role="button" tabindex="0" aria-label="${key} 기록 보기">
         <span class="cal-date-num">${d}</span>
         ${soju > 0 ? `<span class="cal-dot"></span>` : ''}
       </div>
@@ -825,9 +977,7 @@ function renderHistoryCalendar(container) {
   const popupList = document.getElementById('popupList');
   const popupDateTitle = document.getElementById('popupDateTitle');
 
-  container.querySelectorAll('.cal-day.current').forEach(el => {
-    el.onclick = () => {
-      const key = el.dataset.calKey;
+  const openDayPopup = (key) => {
       const dayLogs = state.logs.filter(l => formatDateKey(new Date(l.timestamp)) === key);
       popupDateTitle.textContent = `${key} 기록`;
       
@@ -852,11 +1002,45 @@ function renderHistoryCalendar(container) {
                 </div>
               </div>
               <div class="history-actions">
+                <button class="ghost btn-sm" data-popup-edit="${g.key}">편집</button>
                 <button class="danger btn-sm" data-popup-del="${g.key}">삭제</button>
               </div>
             </div>
           </div>
         `).join('');
+
+        popupList.querySelectorAll('button[data-popup-edit]').forEach(btn => {
+          btn.onclick = () => {
+            const bKey = btn.dataset.popupEdit;
+            const groupLogs = state.logs.filter(l => (l.batchId || `legacy-${l.id}`) === bKey);
+            const firstLog = groupLogs[0];
+            if (!firstLog) return;
+
+            openBatchEditModal(
+              {
+                dateKey: formatDateKey(new Date(firstLog.timestamp)),
+                emoji: firstLog.emoji || '🙂',
+                memo: firstLog.memo || '',
+                items: groupLogs.map(item => ({ id: item.id, type: item.type, amount: item.amount })),
+              },
+              ({ dateKey, emoji, memo, items }) => {
+                const nextTs = toNoonIsoFromDateKey(dateKey);
+                groupLogs.forEach((entry, idx) => {
+                  const nextItem = items[idx];
+                  if (!nextItem) return;
+                  entry.timestamp = nextTs;
+                  entry.emoji = emoji;
+                  entry.memo = memo;
+                  entry.type = nextItem.type;
+                  entry.amount = nextItem.amount;
+                });
+                saveState();
+                renderHistory();
+                requestAnimationFrame(() => openDayPopup(dateKey));
+              },
+            );
+          };
+        });
 
         popupList.querySelectorAll('button[data-popup-del]').forEach(btn => {
           btn.onclick = () => {
@@ -868,6 +1052,15 @@ function renderHistoryCalendar(container) {
         });
       }
       popup.style.display = 'flex';
+  };
+
+  container.querySelectorAll('.cal-day.current').forEach(el => {
+    el.onclick = () => openDayPopup(el.dataset.calKey);
+    el.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openDayPopup(el.dataset.calKey);
+      }
     };
   });
 

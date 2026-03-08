@@ -141,6 +141,23 @@ body {
   overflow: auto;
 }
 
+.edit-modal {
+  width: min(520px, 100%);
+}
+
+.edit-items-wrap {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.edit-item-row {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 10px;
+  align-items: center;
+}
+
 .italic { font-style: italic; }
 
 .history-lines { margin-top: 8px; display: grid; gap: 4px; }
@@ -245,6 +262,11 @@ button {
   background: color-mix(in oklab, var(--card) 55%, #d1d5db);
   color: var(--text);
   font-weight: 600;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
 }
 button.primary { background: var(--primary); color: #fff; }
 button.danger { background: #fee2e2; color: #991b1b; }
