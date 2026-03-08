@@ -200,17 +200,6 @@ body {
   box-shadow: 0 8px 20px rgba(79, 70, 229, 0.16);
 }
 
-.history-view-active-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--primary) 14%, var(--card));
-  color: var(--primary);
-  font-size: 11px;
-  font-weight: 800;
-}
 
 .history-date-group {
   margin-bottom: 24px;
