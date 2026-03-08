@@ -437,6 +437,23 @@ label { display: block; margin: 10px 0 6px; font-weight: 600; }
   font-size: 12px;
 }
 
+.ad-banner {
+  border-top: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+  backdrop-filter: blur(14px);
+  padding: 12px 16px;
+  text-align: center;
+  position: sticky;
+  bottom: 0;
+  z-index: 9;
+}
+
+.ad-text {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 @media (max-width: 640px) {
   .topbar {
     flex-wrap: wrap;

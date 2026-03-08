@@ -24,6 +24,7 @@ let selectedDateKey = null; // Date for popup
 const view = document.getElementById('view');
 const nav = document.getElementById('nav');
 const themeToggle = document.getElementById('themeToggle');
+const adSlot = document.getElementById('adSlot');
 
 function getSystemTheme() {
   return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -61,6 +62,7 @@ function loadState() {
       themeMode: parsed.themeMode || 'auto',
       disabledTypes: parsed.disabledTypes || {},
       onboardedAt: parsed.onboardedAt || null,
+      isPremium: parsed.isPremium || false,
     };
   }
   return {
@@ -69,6 +71,7 @@ function loadState() {
     logs: [],
     isOnboarded: false,
     onboardedAt: null,
+    isPremium: false,
     draftType: 'SOJU',
     draftEmoji: '🙂',
     draftMemo: '',
@@ -223,9 +226,25 @@ function getMonthTotalSoju() {
     .reduce((sum, l) => sum + toSojuUnits(l.amount, l.type), 0);
 }
 
+function renderAd() {
+  if (!adSlot) return;
+
+  if (state.isPremium) {
+    adSlot.innerHTML = '';
+    return;
+  }
+
+  adSlot.innerHTML = `
+    <div class="ad-banner">
+      <div class="ad-text">AD: 간 건강을 위한 영양제 추천 🌿</div>
+    </div>
+  `;
+}
+
 function render() {
   if (!state.isOnboarded) {
     nav.hidden = true;
+    if (adSlot) adSlot.innerHTML = '';
     renderOnboarding();
     return;
   }
@@ -241,6 +260,8 @@ function render() {
     tab = 'home';
     renderHome();
   }
+
+  renderAd();
 }
 
 function renderNav() {
@@ -851,6 +872,23 @@ function renderSettings() {
 
   view.innerHTML = `
     <section class="card">
+      <h2 class="title">👑 프리미엄 혜택</h2>
+      ${state.isPremium
+        ? `
+          <p class="sub">프리미엄 구독 중입니다. (광고 제거)</p>
+          <div class="row" style="margin-top:10px;">
+            <button class="ghost" id="cancelPremium">[테스트] 프리미엄 해제</button>
+          </div>
+        `
+        : `
+          <p class="sub">광고를 제거하고 절주에만 집중하세요!</p>
+          <div class="row" style="margin-top:10px;">
+            <button class="primary" id="buyPremium">광고 제거 및 업그레이드</button>
+          </div>
+        `}
+    </section>
+
+    <section class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <h2 class="title" style="margin:0;">설정</h2>
         <button class="primary" id="saveSettings">저장</button>
@@ -863,7 +901,7 @@ function renderSettings() {
       <label id="settingsGoalLabel">주간 목표 (${getUnitLabel(state.goalBaseType)} 단위)</label>
       <input id="settingsGoal" type="number" step="0.5" min="0.5" value="${goalInBase.toFixed(1)}" />
 
-      <label style="margin-top:14px;">주종 활성/비활성</label>
+      <label style="margin-top:14px;">주종 ON/OFF</label>
       <div class="row" id="typeToggleRow">${typeToggleButtons}</div>
     </section>
 
@@ -876,6 +914,26 @@ function renderSettings() {
   `;
 
   document.getElementById('cycleTheme').onclick = cycleThemeMode;
+
+  const buyBtn = document.getElementById('buyPremium');
+  if (buyBtn) {
+    buyBtn.onclick = () => {
+      state.isPremium = true;
+      saveState();
+      render();
+      showToast('프리미엄 회원이 되신 것을 환영합니다! 👑');
+    };
+  }
+
+  const cancelBtn = document.getElementById('cancelPremium');
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      state.isPremium = false;
+      saveState();
+      render();
+      showToast('프리미엄이 해제되었습니다. (테스트용)');
+    };
+  }
 
   const settingsBaseTypeEl = document.getElementById('settingsBaseType');
   const settingsGoalEl = document.getElementById('settingsGoal');
