@@ -14,6 +14,7 @@ const ALCOHOL_UNITS = {
 
 const state = loadState();
 let tab = 'home';
+let historySubTab = 'list'; // 'list' | 'calendar'
 let undoTimer = null;
 let lastAddedLogIds = [];
 
@@ -214,7 +215,6 @@ function getRolling7TotalSoju() {
 
 function getTodayLimitSoju() {
   const rolling = getRolling7TotalSoju();
-  // The rolling sum already includes today's logs if they exist.
   return Math.max(0, state.weeklyGoal - rolling);
 }
 
@@ -615,60 +615,16 @@ function renderHome() {
 }
 
 function renderHistory() {
-  const year = calendarDate.getFullYear();
-  const month = calendarDate.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const lastDate = new Date(year, month + 1, 0).getDate();
-
-  const prevLastDate = new Date(year, month, 0).getDate();
-  const monthName = `${year}년 ${month + 1}월`;
-
-  // Map of dateKey -> sum of soju units for color marking
-  const dayStats = new Map();
-  state.logs.forEach(l => {
-    const key = formatDateKey(new Date(l.timestamp));
-    dayStats.set(key, (dayStats.get(key) || 0) + toSojuUnits(l.amount, l.type));
-  });
-
-  let calendarHtml = '';
-  // Padding from previous month
-  for (let i = firstDay; i > 0; i--) {
-    calendarHtml += `<div class="cal-day pad">${prevLastDate - i + 1}</div>`;
-  }
-  // Days of current month
-  for (let d = 1; d <= lastDate; d++) {
-    const date = new Date(year, month, d);
-    const key = formatDateKey(date);
-    const soju = dayStats.get(key) || 0;
-    
-    // Determine level (0-4) based on soju units
-    let level = 0;
-    if (soju > 0) {
-      if (soju < 0.5) level = 1;
-      else if (soju < 1.5) level = 2;
-      else if (soju < 3.0) level = 3;
-      else level = 4;
-    }
-
-    calendarHtml += `
-      <div class="cal-day current ${level ? 'has-data level-'+level : ''}" data-cal-key="${key}">
-        <span class="cal-date-num">${d}</span>
-        ${soju > 0 ? `<span class="cal-dot"></span>` : ''}
-      </div>
-    `;
-  }
+  const baseType = state.goalBaseType;
+  const baseInfo = ALCOHOL_UNITS[baseType];
 
   view.innerHTML = `
-    <section class="card">
-      <div class="cal-header">
-        <button class="ghost btn-sm" id="calPrev">&lt;</button>
-        <h2 class="cal-title">${monthName}</h2>
-        <button class="ghost btn-sm" id="calNext">&gt;</button>
+    <section class="card" style="padding-top: 10px;">
+      <div class="row history-tab-header">
+        <button class="ghost ${historySubTab === 'list' ? 'active' : ''}" id="switchToHistoryList">일별 보기</button>
+        <button class="ghost ${historySubTab === 'calendar' ? 'active' : ''}" id="switchToHistoryCal">월간 보기</button>
       </div>
-      <div class="cal-weekdays">
-        <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
-      </div>
-      <div class="cal-grid">${calendarHtml}</div>
+      <div id="historyContent"></div>
     </section>
 
     <div id="historyPopup" class="modal-overlay" style="display:none;">
@@ -682,31 +638,202 @@ function renderHistory() {
     </div>
   `;
 
-  document.getElementById('calPrev').onclick = () => {
+  document.getElementById('switchToHistoryList').onclick = () => { historySubTab = 'list'; renderHistory(); };
+  document.getElementById('switchToHistoryCal').onclick = () => { historySubTab = 'calendar'; renderHistory(); };
+
+  const historyContent = document.getElementById('historyContent');
+
+  if (historySubTab === 'calendar') {
+    renderHistoryCalendar(historyContent);
+  } else {
+    renderHistoryList(historyContent);
+  }
+}
+
+function renderHistoryList(container) {
+  const baseType = state.goalBaseType;
+  const baseInfo = ALCOHOL_UNITS[baseType];
+
+  // Group by timestamp date
+  const dateGroups = new Map();
+  state.logs.forEach((log) => {
+    const dateKey = formatDateKey(new Date(log.timestamp));
+    if (!dateGroups.has(dateKey)) {
+      dateGroups.set(dateKey, []);
+    }
+    dateGroups.get(dateKey).push(log);
+  });
+
+  const sortedDates = [...dateGroups.keys()].sort((a, b) => b.localeCompare(a));
+
+  if (!sortedDates.length) {
+    container.innerHTML = `<p class="empty">기록이 없습니다.</p>`;
+    return;
+  }
+
+  let html = '';
+  sortedDates.forEach((dateKey) => {
+    const logs = dateGroups.get(dateKey);
+    // Within date, group by batch
+    const batches = new Map();
+    logs.forEach((log) => {
+      const bKey = log.batchId || `legacy-${log.id}`;
+      if (!batches.has(bKey)) {
+        batches.set(bKey, { key: bKey, emoji: log.emoji, memo: log.memo, createdAt: log.createdAt, timestamp: log.timestamp, items: [] });
+      }
+      batches.get(bKey).items.push(log);
+    });
+
+    const sortedBatches = [...batches.values()].sort((a, b) => new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp));
+
+    const dateDisplay = new Date(dateKey).toLocaleDateString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric' });
+
+    html += `
+      <div class="history-date-group">
+        ${sortedBatches.map((g, idx) => {
+          const itemLines = g.items.map(l => {
+            const info = ALCOHOL_UNITS[l.type];
+            const converted = fromSojuUnits(toSojuUnits(l.amount, l.type), baseType);
+            return `<div class="small">• ${info.name} ${l.amount}${getUnitLabel(l.type)} (환산 ${baseInfo.name} ${converted.toFixed(2)}${getUnitLabel(baseType)})</div>`;
+          }).join('');
+
+          const isFirstInDate = idx === 0;
+          return `
+            <div class="list-item ${!isFirstInDate ? 'list-item-nested' : ''}">
+              <div class="history-row">
+                <div class="history-main">
+                  ${isFirstInDate ? `<div><strong>${g.emoji || '🙂'} ${dateDisplay} 기록</strong></div>` : ''}
+                  <div class="small">등록시각: ${new Date(g.createdAt || g.timestamp).toLocaleString('ko-KR')}</div>
+                  ${g.memo ? `<div class="small">메모: ${g.memo}</div>` : ''}
+                  <div style="margin-top:6px">${itemLines}</div>
+                </div>
+                <div class="history-actions">
+                  <button class="ghost btn-sm" data-group-edit="${g.key}">편집</button>
+                  <button class="danger btn-sm" data-group-del="${g.key}">삭제</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('button[data-group-edit]').forEach(btn => {
+    btn.onclick = () => {
+      const key = btn.dataset.groupEdit;
+      const log = state.logs.find(l => (l.batchId || `legacy-${l.id}`) === key);
+      if (!log) return;
+
+      const dateKey = formatDateKey(new Date(log.timestamp));
+      const nextDate = prompt('날짜(YYYY-MM-DD)를 입력해 주세요.', dateKey);
+      if (!nextDate) return;
+      
+      const nextEmoji = prompt('이모티콘', log.emoji || '🙂');
+      const nextMemo = prompt('메모', log.memo || '');
+
+      state.logs.forEach(l => {
+        if ((l.batchId || `legacy-${l.id}`) === key) {
+          const [y, m, d] = nextDate.split('-').map(Number);
+          l.timestamp = new Date(y, m - 1, d, 12, 0, 0, 0).toISOString();
+          l.emoji = nextEmoji;
+          l.memo = nextMemo;
+        }
+      });
+      saveState();
+      render();
+    };
+  });
+
+  container.querySelectorAll('button[data-group-del]').forEach(btn => {
+    btn.onclick = () => {
+      if (!confirm('삭제하시겠습니까?')) return;
+      const key = btn.dataset.groupDel;
+      state.logs = state.logs.filter(l => (l.batchId || `legacy-${l.id}`) !== key);
+      saveState();
+      render();
+    };
+  });
+}
+
+function renderHistoryCalendar(container) {
+  const baseType = state.goalBaseType;
+  const baseInfo = ALCOHOL_UNITS[baseType];
+
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const lastDate = new Date(year, month + 1, 0).getDate();
+  const prevLastDate = new Date(year, month, 0).getDate();
+  const monthName = `${year}년 ${month + 1}월`;
+
+  const dayStats = new Map();
+  state.logs.forEach(l => {
+    const key = formatDateKey(new Date(l.timestamp));
+    dayStats.set(key, (dayStats.get(key) || 0) + toSojuUnits(l.amount, l.type));
+  });
+
+  let calendarHtml = '';
+  for (let i = firstDay; i > 0; i--) {
+    calendarHtml += `<div class="cal-day pad">${prevLastDate - i + 1}</div>`;
+  }
+  for (let d = 1; d <= lastDate; d++) {
+    const date = new Date(year, month, d);
+    const key = formatDateKey(date);
+    const soju = dayStats.get(key) || 0;
+    let level = 0;
+    if (soju > 0) {
+      if (soju < 0.5) level = 1;
+      else if (soju < 1.5) level = 2;
+      else if (soju < 3.0) level = 3;
+      else level = 4;
+    }
+    calendarHtml += `
+      <div class="cal-day current ${level ? 'has-data level-'+level : ''}" data-cal-key="${key}">
+        <span class="cal-date-num">${d}</span>
+        ${soju > 0 ? `<span class="cal-dot"></span>` : ''}
+      </div>
+    `;
+  }
+
+  container.innerHTML = `
+    <div class="cal-header">
+      <button class="ghost btn-sm" id="calPrev">&lt;</button>
+      <h2 class="cal-title">${monthName}</h2>
+      <button class="ghost btn-sm" id="calNext">&gt;</button>
+    </div>
+    <div class="cal-weekdays">
+      <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+    </div>
+    <div class="cal-grid">${calendarHtml}</div>
+  `;
+
+  document.getElementById('calPrev').onclick = (e) => {
+    e.stopPropagation();
     calendarDate = new Date(year, month - 1, 1);
-    render();
+    renderHistory();
   };
-  document.getElementById('calNext').onclick = () => {
+  document.getElementById('calNext').onclick = (e) => {
+    e.stopPropagation();
     calendarDate = new Date(year, month + 1, 1);
-    render();
+    renderHistory();
   };
 
   const popup = document.getElementById('historyPopup');
   const popupList = document.getElementById('popupList');
   const popupDateTitle = document.getElementById('popupDateTitle');
 
-  document.querySelectorAll('.cal-day.current').forEach(el => {
+  container.querySelectorAll('.cal-day.current').forEach(el => {
     el.onclick = () => {
       const key = el.dataset.calKey;
-      selectedDateKey = key;
       const dayLogs = state.logs.filter(l => formatDateKey(new Date(l.timestamp)) === key);
-      
       popupDateTitle.textContent = `${key} 기록`;
       
       if (dayLogs.length === 0) {
         popupList.innerHTML = `<p class="empty">기록이 없습니다.</p>`;
       } else {
-        // Group by batch for the popup list
         const groups = new Map();
         dayLogs.forEach(log => {
           const bKey = log.batchId || `legacy-${log.id}`;
@@ -736,7 +863,7 @@ function renderHistory() {
             const bKey = btn.dataset.popupDel;
             state.logs = state.logs.filter(l => (l.batchId || `legacy-${l.id}`) !== bKey);
             saveState();
-            render(); // Refresh the whole view to update calendar dots
+            render();
           };
         });
       }
@@ -744,12 +871,8 @@ function renderHistory() {
     };
   });
 
-  document.getElementById('closePopup').onclick = () => {
-    popup.style.display = 'none';
-  };
-  popup.onclick = (e) => {
-    if (e.target === popup) popup.style.display = 'none';
-  };
+  document.getElementById('closePopup').onclick = () => { popup.style.display = 'none'; };
+  popup.onclick = (e) => { if (e.target === popup) popup.style.display = 'none'; };
 }
 
 function renderStats() {

@@ -145,6 +145,24 @@ body {
 
 .history-lines { margin-top: 8px; display: grid; gap: 4px; }
 
+.history-tab-header {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.history-date-group {
+  margin-bottom: 24px;
+}
+
+.list-item-nested {
+  margin-top: -8px;
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  background: color-mix(in oklab, var(--card) 98%, transparent);
+}
+
 .topbar {
   display: flex;
   align-items: center;
