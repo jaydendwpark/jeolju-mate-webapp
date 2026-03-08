@@ -669,8 +669,16 @@ function renderHistory() {
   view.innerHTML = `
     <section class="history-switcher-wrap">
       <div class="row history-tab-header" role="tablist" aria-label="기록 보기 방식">
-        <button class="ghost ${historySubTab === 'list' ? 'active' : ''}" id="switchToHistoryList" role="tab" aria-selected="${historySubTab === 'list'}">일별 보기</button>
-        <button class="ghost ${historySubTab === 'calendar' ? 'active' : ''}" id="switchToHistoryCal" role="tab" aria-selected="${historySubTab === 'calendar'}">월간 보기</button>
+        <button class="ghost history-view-tab ${historySubTab === 'list' ? 'active' : ''}" id="switchToHistoryList" role="tab" aria-selected="${historySubTab === 'list'}">
+          <span class="history-view-icon" aria-hidden="true">☰</span>
+          <span>일별 보기</span>
+          ${historySubTab === 'list' ? '<span class="history-view-active-badge">선택됨</span>' : ''}
+        </button>
+        <button class="ghost history-view-tab ${historySubTab === 'calendar' ? 'active' : ''}" id="switchToHistoryCal" role="tab" aria-selected="${historySubTab === 'calendar'}">
+          <span class="history-view-icon" aria-hidden="true">🗓️</span>
+          <span>월간 보기</span>
+          ${historySubTab === 'calendar' ? '<span class="history-view-active-badge">선택됨</span>' : ''}
+        </button>
       </div>
     </section>
 
