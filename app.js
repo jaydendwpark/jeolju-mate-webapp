@@ -17,6 +17,10 @@ let tab = 'home';
 let undoTimer = null;
 let lastAddedLogIds = [];
 
+// Calendar state
+let calendarDate = new Date(); // Viewing month
+let selectedDateKey = null; // Date for popup
+
 const view = document.getElementById('view');
 const nav = document.getElementById('nav');
 const themeToggle = document.getElementById('themeToggle');
@@ -56,6 +60,7 @@ function loadState() {
       ...parsed,
       themeMode: parsed.themeMode || 'auto',
       disabledTypes: parsed.disabledTypes || {},
+      onboardedAt: parsed.onboardedAt || null,
     };
   }
   return {
@@ -63,6 +68,7 @@ function loadState() {
     goalBaseType: 'SOJU',
     logs: [],
     isOnboarded: false,
+    onboardedAt: null,
     draftType: 'SOJU',
     draftEmoji: '🙂',
     draftMemo: '',
@@ -76,11 +82,11 @@ function saveState() {
 }
 
 function toSojuUnits(amount, type) {
-  return amount * ALCOHOL_UNITS[type].unit;
+  return amount * (ALCOHOL_UNITS[type]?.unit || 1.0);
 }
 
 function fromSojuUnits(sojuUnits, type) {
-  return sojuUnits / ALCOHOL_UNITS[type].unit;
+  return sojuUnits / (ALCOHOL_UNITS[type]?.unit || 1.0);
 }
 
 function formatBaseAmount(baseAmount) {
@@ -92,7 +98,6 @@ function formatBaseAmount(baseAmount) {
 function getUnitLabel(type) {
   return ALCOHOL_UNITS[type]?.unitLabel || '병';
 }
-
 
 function addDays(date, days) {
   const d = new Date(date);
@@ -106,6 +111,42 @@ function formatDateKey(date) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function getConsecutiveSobrietyDays() {
+  if (!state.onboardedAt) return 0;
+
+  const logs = state.logs;
+  const weeklyGoal = state.weeklyGoal;
+  const onboardingDate = new Date(state.onboardedAt);
+  onboardingDate.setHours(0, 0, 0, 0);
+
+  let streak = 0;
+  let checkDate = new Date();
+  checkDate.setHours(12, 0, 0, 0);
+
+  while (true) {
+    if (checkDate.getTime() < onboardingDate.getTime()) break;
+
+    const cutoff = checkDate.getTime() + 12 * 60 * 60 * 1000;
+    const startWindow = cutoff - 7 * 24 * 60 * 60 * 1000;
+
+    const rollingSum = logs
+      .filter((l) => {
+        const ts = new Date(l.timestamp).getTime();
+        return ts >= startWindow && ts <= cutoff;
+      })
+      .reduce((sum, l) => sum + toSojuUnits(l.amount, l.type), 0);
+
+    if (rollingSum <= weeklyGoal) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      break;
+    }
+    if (streak > 365) break;
+  }
+  return streak;
 }
 
 function showToast(message, options = {}) {
@@ -154,9 +195,9 @@ function isTypeEnabled(type) {
 }
 
 function getTodayTotalSoju() {
-  const today = new Date().toDateString();
+  const today = formatDateKey(new Date());
   return state.logs
-    .filter((l) => new Date(l.timestamp).toDateString() === today)
+    .filter((l) => formatDateKey(new Date(l.timestamp)) === today)
     .reduce((sum, l) => sum + toSojuUnits(l.amount, l.type), 0);
 }
 
@@ -170,8 +211,8 @@ function getRolling7TotalSoju() {
 
 function getTodayLimitSoju() {
   const rolling = getRolling7TotalSoju();
-  const today = getTodayTotalSoju();
-  return Math.max(0, state.weeklyGoal - (rolling - today));
+  // The rolling sum already includes today's logs if they exist.
+  return Math.max(0, state.weeklyGoal - rolling);
 }
 
 function getMonthTotalSoju() {
@@ -266,6 +307,7 @@ function renderOnboarding() {
     state.goalBaseType = baseType;
     state.weeklyGoal = toSojuUnits(goalInBase, baseType);
     state.isOnboarded = true;
+    state.onboardedAt = new Date().toISOString();
     if (!state.draftType) state.draftType = baseType;
 
     saveState();
@@ -278,6 +320,7 @@ function renderHome() {
   const todayLimitSoju = getTodayLimitSoju();
   const rollingSoju = getRolling7TotalSoju();
   const monthSoju = getMonthTotalSoju();
+  const sobrietyStreak = getConsecutiveSobrietyDays();
 
   const baseType = state.goalBaseType;
   const baseInfo = ALCOHOL_UNITS[baseType];
@@ -290,7 +333,6 @@ function renderHome() {
   const progress = Math.min(100, (rollingSoju / state.weeklyGoal) * 100 || 0);
   const todayLimitAsSojuBottles = todayLimitSoju.toFixed(1);
 
-  // Draft date: YYYY-MM-DD (default: yesterday)
   if (!state.draftDate) {
     state.draftDate = formatDateKey(addDays(new Date(), -1));
     saveState();
@@ -342,14 +384,16 @@ function renderHome() {
     .join('');
 
   view.innerHTML = `
+    <div class="streak-line">연속 절주 성공 ${sobrietyStreak}일째 🔥</div>
+
     <section class="card">
       <div class="row" style="justify-content:flex-start;align-items:center;">
-        <h2 class="title" style="margin:0">오늘 마실 수 있는 양</h2>
+        <h2 class="title" style="margin:0">오늘 더 마실 수 있는 양</h2>
         <span class="info-inline">
           <button class="info-btn" id="formulaInfoBtn" title="계산식/환산표">i</button>
           <span id="formulaInfoBox" class="info-pop-inline" style="display:none;">
             <div class="info-title">계산식</div>
-            <div>주간 목표 - (최근7일 누적 - 오늘 섭취)</div>
+            <div>주간 목표 - 최근 7일 누적</div>
             <div class="info-title" style="margin-top:8px;">주종별 알콜 환산표</div>
             <ul>${buildAlcoholConversionList(baseType)}</ul>
           </span>
@@ -416,7 +460,6 @@ function renderHome() {
     box.style.display = isHidden ? 'block' : 'none';
   };
 
-  // Date controls
   const dateInput = document.getElementById('dateInput');
   const todayKey = formatDateKey(new Date());
   const yesterdayKey = formatDateKey(addDays(new Date(), -1));
@@ -452,7 +495,6 @@ function renderHome() {
     }
   };
 
-  // Emoji and memo
   document.querySelectorAll('button[data-emoji]').forEach((btn) => {
     btn.onclick = () => {
       state.draftEmoji = btn.dataset.emoji;
@@ -467,7 +509,6 @@ function renderHome() {
     saveState();
   };
 
-  // Quick add buttons
   document.querySelectorAll('button[data-add-type]').forEach((btn) => {
     btn.onclick = () => {
       const t = btn.dataset.addType;
@@ -478,7 +519,6 @@ function renderHome() {
     };
   });
 
-  // Delete each draft alcohol type
   document.querySelectorAll('button[data-draft-del]').forEach((btn) => {
     btn.onclick = () => {
       const t = btn.dataset.draftDel;
@@ -488,7 +528,7 @@ function renderHome() {
     };
   });
 
-  const clearDraft = () => {
+  document.getElementById('clearDraft').onclick = () => {
     state.draftTotals = {};
     state.draftMemo = '';
     state.draftEmoji = '🙂';
@@ -496,13 +536,10 @@ function renderHome() {
     render();
   };
 
-  document.getElementById('clearDraft').onclick = clearDraft;
-
   const registerLog = () => {
     const entries = Object.entries(state.draftTotals || {}).filter(([, v]) => Number(v) > 0);
     if (!entries.length) return alert('추가된 음주가 없습니다.');
 
-    // timestamp: selected date at 12:00 local time (avoid timezone surprises)
     const [y, m, d] = state.draftDate.split('-').map(Number);
     const ts = new Date(y, (m - 1), d, 12, 0, 0, 0).toISOString();
 
@@ -556,132 +593,143 @@ function renderHome() {
   if (registerLogTopBtn) registerLogTopBtn.onclick = registerLog;
 }
 
-
 function renderHistory() {
-  const baseType = state.goalBaseType;
-  const baseInfo = ALCOHOL_UNITS[baseType];
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const lastDate = new Date(year, month + 1, 0).getDate();
 
-  // 등록 건(batch) 기준으로 그룹화
-  const groups = new Map();
-  state.logs.forEach((log) => {
-    const key = log.batchId || `legacy-${log.id}`;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        timestamp: log.timestamp,
-        createdAt: log.createdAt || log.timestamp,
-        emoji: log.emoji || '',
-        memo: log.memo || '',
-        items: [],
-      });
-    }
-    const g = groups.get(key);
-    g.items.push(log);
-    // 그룹 메타 최신값 보정
-    if (log.createdAt && new Date(log.createdAt) > new Date(g.createdAt)) g.createdAt = log.createdAt;
-    if (log.emoji) g.emoji = log.emoji;
-    if (log.memo) g.memo = log.memo;
+  const prevLastDate = new Date(year, month, 0).getDate();
+  const monthName = `${year}년 ${month + 1}월`;
+
+  // Map of dateKey -> sum of soju units for color marking
+  const dayStats = new Map();
+  state.logs.forEach(l => {
+    const key = formatDateKey(new Date(l.timestamp));
+    dayStats.set(key, (dayStats.get(key) || 0) + toSojuUnits(l.amount, l.type));
   });
 
-  const grouped = [...groups.values()].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  let calendarHtml = '';
+  // Padding from previous month
+  for (let i = firstDay; i > 0; i--) {
+    calendarHtml += `<div class="cal-day pad">${prevLastDate - i + 1}</div>`;
+  }
+  // Days of current month
+  for (let d = 1; d <= lastDate; d++) {
+    const date = new Date(year, month, d);
+    const key = formatDateKey(date);
+    const soju = dayStats.get(key) || 0;
+    
+    // Determine level (0-4) based on soju units
+    let level = 0;
+    if (soju > 0) {
+      if (soju < 0.5) level = 1;
+      else if (soju < 1.5) level = 2;
+      else if (soju < 3.0) level = 3;
+      else level = 4;
+    }
 
-  if (!grouped.length) {
-    view.innerHTML = `<section class="card"><p class="empty">기록이 없습니다.</p></section>`;
-    return;
+    calendarHtml += `
+      <div class="cal-day current ${level ? 'has-data level-'+level : ''}" data-cal-key="${key}">
+        <span class="cal-date-num">${d}</span>
+        ${soju > 0 ? `<span class="cal-dot"></span>` : ''}
+      </div>
+    `;
   }
 
   view.innerHTML = `
     <section class="card">
-      <h2 class="title">기록</h2>
-      <p class="sub">등록 건 단위로 묶어서 표시됩니다. (${baseInfo.name} ${getUnitLabel(baseType)} 기준 환산)</p>
-      <div id="list"></div>
+      <div class="cal-header">
+        <button class="ghost btn-sm" id="calPrev">&lt;</button>
+        <h2 class="cal-title">${monthName}</h2>
+        <button class="ghost btn-sm" id="calNext">&gt;</button>
+      </div>
+      <div class="cal-weekdays">
+        <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+      </div>
+      <div class="cal-grid">${calendarHtml}</div>
     </section>
+
+    <div id="historyPopup" class="modal-overlay" style="display:none;">
+      <div class="modal-content card">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <h3 class="title" id="popupDateTitle">기록</h3>
+          <button class="ghost btn-sm" id="closePopup">닫기</button>
+        </div>
+        <div id="popupList" class="popup-list"></div>
+      </div>
+    </div>
   `;
 
-  const list = document.getElementById('list');
+  document.getElementById('calPrev').onclick = () => {
+    calendarDate = new Date(year, month - 1, 1);
+    render();
+  };
+  document.getElementById('calNext').onclick = () => {
+    calendarDate = new Date(year, month + 1, 1);
+    render();
+  };
 
-  grouped.forEach((g) => {
-    const el = document.createElement('div');
-    el.className = 'list-item';
+  const popup = document.getElementById('historyPopup');
+  const popupList = document.getElementById('popupList');
+  const popupDateTitle = document.getElementById('popupDateTitle');
 
-    const itemLines = g.items
-      .map((l) => {
-        const info = ALCOHOL_UNITS[l.type];
-        const sojuUnits = toSojuUnits(l.amount, l.type);
-        const converted = fromSojuUnits(sojuUnits, baseType);
-        return `<div class="small">• ${info.name} ${l.amount}${getUnitLabel(l.type)} (환산 ${baseInfo.name} ${converted.toFixed(2)}${getUnitLabel(baseType)})</div>`;
-      })
-      .join('');
+  document.querySelectorAll('.cal-day.current').forEach(el => {
+    el.onclick = () => {
+      const key = el.dataset.calKey;
+      selectedDateKey = key;
+      const dayLogs = state.logs.filter(l => formatDateKey(new Date(l.timestamp)) === key);
+      
+      popupDateTitle.textContent = `${key} 기록`;
+      
+      if (dayLogs.length === 0) {
+        popupList.innerHTML = `<p class="empty">기록이 없습니다.</p>`;
+      } else {
+        // Group by batch for the popup list
+        const groups = new Map();
+        dayLogs.forEach(log => {
+          const bKey = log.batchId || `legacy-${log.id}`;
+          if (!groups.has(bKey)) groups.set(bKey, { key: bKey, emoji: log.emoji, memo: log.memo, items: [] });
+          groups.get(bKey).items.push(log);
+        });
 
-    el.innerHTML = `
-      <div class="history-row">
-        <div class="history-main">
-          <div><strong>${g.emoji ? g.emoji + ' ' : ''}${new Date(g.timestamp).toLocaleDateString('ko-KR')} 기록</strong></div>
-          <div class="small">등록시각: ${new Date(g.createdAt).toLocaleString('ko-KR')}</div>
-          ${g.memo ? `<div class="small">메모: ${g.memo}</div>` : ''}
-          <div style="margin-top:6px">${itemLines}</div>
-        </div>
-        <div class="history-actions">
-          <button class="ghost btn-sm" data-group-edit="${g.key}">편집</button>
-          <button class="danger btn-sm" data-group-del="${g.key}">삭제</button>
-        </div>
-      </div>
-    `;
+        popupList.innerHTML = [...groups.values()].map(g => `
+          <div class="list-item">
+            <div class="history-row">
+              <div class="history-main">
+                <strong>${g.emoji || '🙂'} 기록</strong>
+                ${g.memo ? `<div class="small italic">${g.memo}</div>` : ''}
+                <div class="history-lines">
+                  ${g.items.map(l => `<div class="small">• ${ALCOHOL_UNITS[l.type]?.name} ${l.amount}${getUnitLabel(l.type)}</div>`).join('')}
+                </div>
+              </div>
+              <div class="history-actions">
+                <button class="danger btn-sm" data-popup-del="${g.key}">삭제</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
 
-    list.appendChild(el);
-  });
-
-  // 그룹 편집: 날짜/감정/메모 편집
-  list.querySelectorAll('button[data-group-edit]').forEach((btn) => {
-    btn.onclick = () => {
-      const key = btn.dataset.groupEdit;
-      const target = grouped.find((g) => g.key === key);
-      if (!target) return;
-
-      const dateKey = formatDateKey(new Date(target.timestamp));
-      const nextDate = prompt('날짜(YYYY-MM-DD)를 입력해 주세요.', dateKey);
-      if (nextDate === null) return;
-      const dm = nextDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (!dm) return alert('날짜 형식이 올바르지 않습니다. 예: 2026-03-06');
-
-      const nextEmoji = prompt('감정 이모티콘을 입력해 주세요.', target.emoji || '🙂');
-      if (nextEmoji === null) return;
-
-      const nextMemo = prompt('메모를 입력해 주세요.', target.memo || '');
-      if (nextMemo === null) return;
-
-      const y = Number(dm[1]);
-      const mo = Number(dm[2]);
-      const d = Number(dm[3]);
-      const nextTs = new Date(y, mo - 1, d, 12, 0, 0, 0).toISOString();
-
-      state.logs.forEach((l) => {
-        const lKey = l.batchId || `legacy-${l.id}`;
-        if (lKey === key) {
-          l.timestamp = nextTs;
-          l.emoji = nextEmoji;
-          l.memo = nextMemo;
-        }
-      });
-
-      saveState();
-      render();
-      showToast('등록 건을 편집했습니다.');
+        popupList.querySelectorAll('button[data-popup-del]').forEach(btn => {
+          btn.onclick = () => {
+            const bKey = btn.dataset.popupDel;
+            state.logs = state.logs.filter(l => (l.batchId || `legacy-${l.id}`) !== bKey);
+            saveState();
+            render(); // Refresh the whole view to update calendar dots
+          };
+        });
+      }
+      popup.style.display = 'flex';
     };
   });
 
-  // 그룹 삭제
-  list.querySelectorAll('button[data-group-del]').forEach((btn) => {
-    btn.onclick = () => {
-      const key = btn.dataset.groupDel;
-      state.logs = state.logs.filter((l) => (l.batchId || `legacy-${l.id}`) !== key);
-      saveState();
-      render();
-      showToast('등록 건을 삭제했습니다.');
-    };
-  });
+  document.getElementById('closePopup').onclick = () => {
+    popup.style.display = 'none';
+  };
+  popup.onclick = (e) => {
+    if (e.target === popup) popup.style.display = 'none';
+  };
 }
-
 
 function renderStats() {
   const baseType = state.goalBaseType;
@@ -755,13 +803,13 @@ function renderStats() {
 
     <section class="card">
       <h3 class="title">최근 음주량</h3>
-      <div class="stats-dual" style="display:flex;gap:10px;flex-wrap:nowrap;">
-        <div class="list-item" style="flex:1;min-width:0;">
+      <div class="stats-dual">
+        <div class="list-item">
           <div class="small">최근 7일</div>
           <div class="big" style="font-size:26px">${fromSojuUnits(total7Soju, baseType).toFixed(2)}</div>
           <div class="small">${baseInfo.name} 기준</div>
         </div>
-        <div class="list-item" style="flex:1;min-width:0;">
+        <div class="list-item">
           <div class="small">최근 30일</div>
           <div class="big" style="font-size:26px">${fromSojuUnits(total30Soju, baseType).toFixed(2)}</div>
           <div class="small">${baseInfo.name} 기준</div>
@@ -818,7 +866,16 @@ function renderSettings() {
       <label style="margin-top:14px;">주종 활성/비활성</label>
       <div class="row" id="typeToggleRow">${typeToggleButtons}</div>
     </section>
+
+    <section class="card">
+      <h2 class="title">앱 설정</h2>
+      <div class="row">
+        <button class="ghost" id="cycleTheme">테마 ${state.themeMode}</button>
+      </div>
+    </section>
   `;
+
+  document.getElementById('cycleTheme').onclick = cycleThemeMode;
 
   const settingsBaseTypeEl = document.getElementById('settingsBaseType');
   const settingsGoalEl = document.getElementById('settingsGoal');
@@ -844,7 +901,6 @@ function renderSettings() {
       render();
     };
   });
-
 
   document.getElementById('saveSettings').onclick = () => {
     const baseType = settingsBaseTypeEl.value;
