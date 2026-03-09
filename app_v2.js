@@ -1,4 +1,17 @@
 const STORE_KEY = 'jeolju-mate-webapp-v3';
+const MOBILE_APP_UA_TOKEN = 'JeoljuMateMobileApp';
+const MOBILE_AUTH_TRIGGER_SELECTORS = [
+  '[data-native-google-login]',
+  '[data-google-login]',
+  '[data-auth-provider="google"]',
+  '[data-provider="google"]',
+  '#google-login',
+  '#google-login-button',
+  '.google-login',
+  '.google-login-button',
+  'a[href*="/auth/v1/authorize?provider=google"]',
+  'a[href*="accounts.google.com"]',
+];
 
 const ALCOHOL_UNITS = {
   SOJU: { name: '소주', unit: 1.0, baseAmount: '1병(360ml)', unitLabel: '병' },
@@ -17,6 +30,8 @@ let tab = 'home';
 let historySubTab = 'list'; // 'list' | 'calendar'
 let undoTimer = null;
 let lastAddedLogIds = [];
+const isMobileNativeApp = detectMobileNativeApp();
+let mobileAuthObserver = null;
 
 // Calendar state
 let calendarDate = new Date(); // Viewing month
@@ -26,6 +41,153 @@ const view = document.getElementById('view');
 const nav = document.getElementById('nav');
 const themeToggle = document.getElementById('themeToggle');
 const adSlot = document.getElementById('adSlot');
+
+if (isMobileNativeApp) {
+  document.documentElement.setAttribute('data-jeolju-native-app', '1');
+}
+
+function detectMobileNativeApp() {
+  if (typeof window === 'undefined') return false;
+  const ua = String(window.navigator?.userAgent || '');
+  return (
+    ua.includes(MOBILE_APP_UA_TOKEN) ||
+    Boolean(window.__JEOLJU_MATE_MOBILE_APP__) ||
+    Boolean(window.ReactNativeWebView)
+  );
+}
+
+function getNativeBridge() {
+  if (!isMobileNativeApp) return null;
+  return window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function'
+    ? window.ReactNativeWebView
+    : null;
+}
+
+function postToNative(payload) {
+  const bridge = getNativeBridge();
+  if (!bridge) return false;
+  try {
+    bridge.postMessage(JSON.stringify(payload));
+    return true;
+  } catch (err) {
+    console.warn('Failed to postMessage to native bridge', err);
+    return false;
+  }
+}
+
+function requestNativeGoogleLogin(source = 'webapp') {
+  return postToNative({
+    type: 'native-google-login',
+    source,
+    timestamp: Date.now(),
+  });
+}
+
+function isGoogleLoginTriggerElement(el) {
+  if (!(el instanceof Element)) return false;
+  return MOBILE_AUTH_TRIGGER_SELECTORS.some((selector) => el.matches(selector));
+}
+
+function hideWebGoogleLoginButtons(root = document) {
+  if (!isMobileNativeApp) return;
+  root.querySelectorAll(MOBILE_AUTH_TRIGGER_SELECTORS.join(',')).forEach((el) => {
+    el.setAttribute('data-hidden-by-native-auth', '1');
+    el.style.display = 'none';
+  });
+}
+
+function bindNativeGoogleLoginButton(root = document) {
+  if (!isMobileNativeApp) return;
+  root.querySelectorAll('[data-native-google-login], [data-native-login-trigger="google"]').forEach((el) => {
+    if (el.dataset.nativeGoogleLoginBound === '1') return;
+    el.dataset.nativeGoogleLoginBound = '1';
+    el.addEventListener('click', (event) => {
+      event.preventDefault();
+      requestNativeGoogleLogin(el.getAttribute('data-native-login-source') || 'data-native-google-login');
+    });
+  });
+}
+
+function syncNativeAuthState(payload = {}) {
+  const nextAuth = {
+    isLoggedIn: Boolean(payload.isLoggedIn),
+    provider: payload.provider || null,
+    user: payload.user || null,
+    updatedAt: payload.timestamp || Date.now(),
+  };
+
+  const prevSignature = JSON.stringify(state.auth || {});
+  const nextSignature = JSON.stringify(nextAuth);
+  state.auth = nextAuth;
+  saveState();
+
+  if (tab === 'settings' && prevSignature !== nextSignature) {
+    renderSettings();
+  }
+}
+
+function getAuthDisplayName() {
+  return state.auth?.user?.displayName || state.auth?.user?.email || 'Google 계정';
+}
+
+function setupMobileNativeAuthBridge() {
+  if (!isMobileNativeApp) return;
+
+  hideWebGoogleLoginButtons();
+  bindNativeGoogleLoginButton();
+
+  document.addEventListener('click', (event) => {
+    const trigger = event.target?.closest?.(MOBILE_AUTH_TRIGGER_SELECTORS.join(','));
+    if (!isGoogleLoginTriggerElement(trigger)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    requestNativeGoogleLogin('google-login-trigger');
+  });
+
+  const handleNativeMessage = (event) => {
+    const rawData = event?.data;
+    if (typeof rawData !== 'string') return;
+    let payload = null;
+    try {
+      payload = JSON.parse(rawData);
+    } catch {
+      return;
+    }
+    if (payload?.type === 'native-auth-sync' || payload?.type === 'native-google-login-result') {
+      syncNativeAuthState(payload);
+    }
+    if (payload?.type === 'native-google-login-result') {
+      if (payload.ok && payload.isLoggedIn) {
+        showToast(`${getAuthDisplayName()} 계정으로 로그인되었습니다.`);
+      } else if (!payload.ok && payload.reason !== 'cancel' && payload.reason !== 'dismiss') {
+        showToast(payload.message || 'Google 로그인에 실패했습니다.');
+      }
+    }
+  };
+
+  window.addEventListener('message', handleNativeMessage);
+  document.addEventListener('message', handleNativeMessage);
+  window.addEventListener('jeolju-native-auth-sync', (event) => {
+    if (event?.detail) {
+      syncNativeAuthState(event.detail);
+    }
+  });
+
+  if ('MutationObserver' in window) {
+    mobileAuthObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (!(node instanceof Element)) return;
+          hideWebGoogleLoginButtons(node);
+          bindNativeGoogleLoginButton(node);
+        });
+      });
+    });
+    mobileAuthObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  window.requestNativeGoogleLogin = requestNativeGoogleLogin;
+}
 
 function getSystemTheme() {
   return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -62,6 +224,12 @@ function loadState() {
     isOnboarded: false,
     onboardedAt: null,
     isPremium: false,
+    auth: {
+      isLoggedIn: false,
+      provider: null,
+      user: null,
+      updatedAt: null,
+    },
     draftType: 'SOJU',
     draftEmoji: '🙂',
     draftMemo: '',
@@ -76,12 +244,17 @@ function loadState() {
     const parsed = JSON.parse(raw);
     const logs = Array.isArray(parsed.logs) ? parsed.logs : [];
     const disabledTypes = parsed.disabledTypes && typeof parsed.disabledTypes === 'object' ? parsed.disabledTypes : {};
+    const auth = parsed.auth && typeof parsed.auth === 'object' ? parsed.auth : defaultState.auth;
 
     return {
       ...defaultState,
       ...parsed,
       logs,
       disabledTypes,
+      auth: {
+        ...defaultState.auth,
+        ...auth,
+      },
       themeMode: ['auto', 'light', 'dark'].includes(parsed.themeMode) ? parsed.themeMode : 'auto',
       onboardedAt: parsed.onboardedAt || null,
       isPremium: Boolean(parsed.isPremium),
@@ -1505,6 +1678,10 @@ function renderStats() {
 
 function renderSettings() {
   const enabledEntries = Object.entries(ALCOHOL_UNITS).filter(([k]) => isTypeEnabled(k));
+  const auth = state.auth || {};
+  const isLoggedIn = Boolean(auth.isLoggedIn);
+  const authProviderLabel = auth.provider === 'google' ? 'Google' : '소셜';
+  const authDisplayName = getAuthDisplayName();
   if (!enabledEntries.find(([k]) => k === state.goalBaseType)) {
     state.goalBaseType = enabledEntries[0]?.[0] || 'SOJU';
   }
@@ -1523,20 +1700,29 @@ function renderSettings() {
 
   view.innerHTML = `
     <section class="card">
-      <h2 class="title">👑 프리미엄 혜택</h2>
-      ${state.isPremium
-        ? `
-          <p class="sub">프리미엄 구독 중입니다. (광고 제거)</p>
-          <div class="row" style="margin-top:10px;">
-            <button class="ghost" id="cancelPremium">[테스트] 프리미엄 해제</button>
+      <div class="settings-premium-head">
+        <div>
+          <h2 class="title">👑 프리미엄 혜택</h2>
+          ${state.isPremium
+            ? `<p class="sub">프리미엄 구독 중입니다. (광고 제거)</p>`
+            : `<p class="sub">광고를 제거하고 절주에만 집중하세요!</p>`}
+        </div>
+        <div class="settings-auth-box ${isLoggedIn ? 'logged-in' : ''}">
+          <div class="settings-auth-copy">
+            <span class="settings-auth-label">계정</span>
+            <strong>${isLoggedIn ? authDisplayName : '로그인이 필요해요'}</strong>
+            <span>${isLoggedIn ? `${authProviderLabel} 로그인 완료` : '기록/구독 상태를 안전하게 연동하세요.'}</span>
           </div>
-        `
-        : `
-          <p class="sub">광고를 제거하고 절주에만 집중하세요!</p>
-          <div class="row" style="margin-top:10px;">
-            <button class="primary" id="buyPremium">광고 제거 및 업그레이드</button>
-          </div>
-        `}
+          <button class="${isLoggedIn ? 'ghost' : 'primary'}" id="settingsNativeGoogleLogin" ${isLoggedIn ? 'disabled' : ''}>
+            ${isLoggedIn ? '로그인 완료' : 'Google 로그인'}
+          </button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        ${state.isPremium
+          ? `<button class="ghost" id="cancelPremium">[테스트] 프리미엄 해제</button>`
+          : `<button class="primary" id="buyPremium">광고 제거 및 업그레이드</button>`}
+      </div>
     </section>
 
     <section class="card">
@@ -1565,6 +1751,15 @@ function renderSettings() {
   `;
 
   document.getElementById('cycleTheme').onclick = cycleThemeMode;
+
+  const nativeLoginBtn = document.getElementById('settingsNativeGoogleLogin');
+  if (nativeLoginBtn && !isLoggedIn) {
+    nativeLoginBtn.dataset.nativeLoginTrigger = 'google';
+    nativeLoginBtn.dataset.nativeLoginSource = 'settings-premium-section';
+    nativeLoginBtn.onclick = () => {
+      requestNativeGoogleLogin('settings-premium-section');
+    };
+  }
 
   const buyBtn = document.getElementById('buyPremium');
   if (buyBtn) {
@@ -1637,4 +1832,5 @@ if (window.matchMedia) {
 }
 
 applyTheme();
+setupMobileNativeAuthBridge();
 render();
