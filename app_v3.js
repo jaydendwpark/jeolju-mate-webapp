@@ -83,6 +83,38 @@ function requestNativeGoogleLogin(source = 'webapp') {
   });
 }
 
+function requestNativeLogout(source = 'webapp') {
+  return postToNative({
+    type: 'native-logout',
+    source,
+    timestamp: Date.now(),
+  });
+}
+
+function requestNativePremiumPurchase(source = 'webapp') {
+  return postToNative({
+    type: 'native-start-premium-purchase',
+    source,
+    timestamp: Date.now(),
+  });
+}
+
+function requestNativePremiumRestore(source = 'webapp') {
+  return postToNative({
+    type: 'native-restore-premium',
+    source,
+    timestamp: Date.now(),
+  });
+}
+
+function requestNativePremiumRefresh(source = 'webapp') {
+  return postToNative({
+    type: 'native-refresh-premium-status',
+    source,
+    timestamp: Date.now(),
+  });
+}
+
 function isGoogleLoginTriggerElement(el) {
   if (!(el instanceof Element)) return false;
   return MOBILE_AUTH_TRIGGER_SELECTORS.some((selector) => el.matches(selector));
@@ -108,7 +140,77 @@ function bindNativeGoogleLoginButton(root = document) {
   });
 }
 
+function normalizePremiumState(input = {}) {
+  const premium = input && typeof input === 'object' ? input : {};
+  const expiresAt = premium.expiresAt ? new Date(premium.expiresAt) : null;
+  const hasValidExpiry = expiresAt && !Number.isNaN(expiresAt.getTime());
+  const expired = hasValidExpiry ? expiresAt.getTime() <= Date.now() : false;
+  const status = premium.status || (premium.isPremium ? 'active' : 'inactive');
+  const isPremium = Boolean((premium.isPremium || status === 'active') && !expired);
+
+  return {
+    isPremium,
+    status: isPremium ? 'active' : expired ? 'expired' : status,
+    entitlementSource: premium.entitlementSource || 'none',
+    productId: premium.productId || null,
+    planType: premium.planType || 'subscription',
+    platform: premium.platform || (isMobileNativeApp ? 'android' : 'web'),
+    purchaseToken: premium.purchaseToken || null,
+    orderId: premium.orderId || null,
+    expiresAt: hasValidExpiry ? expiresAt.toISOString() : null,
+    startedAt: premium.startedAt || null,
+    lastVerifiedAt: premium.lastVerifiedAt || null,
+    reason: premium.reason || null,
+  };
+}
+
+function isPremiumActive() {
+  return Boolean(state.premium?.isPremium || state.isPremium);
+}
+
+function syncPremiumFromNativePayload(payload = {}) {
+  const incomingPremium = payload?.premium && typeof payload.premium === 'object'
+    ? payload.premium
+    : {
+        isPremium: typeof payload?.premiumActive === 'boolean' ? payload.premiumActive : Boolean(payload?.isPremium),
+        productId: payload?.productId || null,
+        reason: payload?.reason || null,
+      };
+
+  const nextPremium = normalizePremiumState({
+    ...state.premium,
+    ...incomingPremium,
+  });
+
+  state.premium = nextPremium;
+  state.isPremium = nextPremium.isPremium;
+  saveState();
+
+  if (adSlot) {
+    renderAd();
+  }
+}
+
+function getPremiumStatusText() {
+  const premium = state.premium || normalizePremiumState({ isPremium: state.isPremium });
+
+  if (premium.isPremium) {
+    const expiresLabel = premium.expiresAt
+      ? new Date(premium.expiresAt).toLocaleDateString('ko-KR')
+      : '갱신형';
+    return `Google Play 구독 활성 (${expiresLabel})`;
+  }
+
+  if (premium.status === 'expired') return '구독이 만료되었습니다.';
+  if (premium.reason === 'billing_not_connected') return 'Billing SDK 연결 전 스캐폴딩 상태입니다.';
+  return isMobileNativeApp ? '앱에서 Google Play 구독을 연결할 수 있습니다.' : '모바일 앱에서 Google Play 구독 후 동기화됩니다.';
+}
+
 function syncNativeAuthState(payload = {}) {
+  const prevPremiumSignature = JSON.stringify(state.premium || {});
+  syncPremiumFromNativePayload(payload);
+  const nextPremiumSignature = JSON.stringify(state.premium || {});
+
   const nextAuth = {
     isLoggedIn: Boolean(payload.isLoggedIn),
     provider: payload.provider || null,
@@ -121,8 +223,12 @@ function syncNativeAuthState(payload = {}) {
   state.auth = nextAuth;
   saveState();
 
-  if (tab === 'settings' && prevSignature !== nextSignature) {
+  if (tab === 'settings' && (prevSignature !== nextSignature || prevPremiumSignature !== nextPremiumSignature)) {
     renderSettings();
+  }
+
+  if (tab === 'stats' && prevPremiumSignature !== nextPremiumSignature) {
+    renderStats();
   }
 }
 
@@ -153,7 +259,7 @@ function setupMobileNativeAuthBridge() {
     } catch {
       return;
     }
-    if (payload?.type === 'native-auth-sync' || payload?.type === 'native-google-login-result') {
+    if (['native-auth-sync', 'native-google-login-result', 'native-logout-result', 'native-premium-status', 'native-premium-purchase-result', 'native-premium-restore-result'].includes(payload?.type)) {
       syncNativeAuthState(payload);
     }
     if (payload?.type === 'native-google-login-result') {
@@ -161,6 +267,23 @@ function setupMobileNativeAuthBridge() {
         showToast(`${getAuthDisplayName()} 계정으로 로그인되었습니다.`);
       } else if (!payload.ok && payload.reason !== 'cancel' && payload.reason !== 'dismiss') {
         showToast(payload.message || 'Google 로그인에 실패했습니다.');
+      }
+    }
+    if (payload?.type === 'native-logout-result') {
+      if (payload.ok) {
+        showToast('로그아웃되었습니다.');
+      } else {
+        showToast(payload.message || '로그아웃에 실패했습니다.');
+      }
+    }
+    if (payload?.type === 'native-premium-purchase-result' || payload?.type === 'native-premium-restore-result') {
+      if (payload.ok && isPremiumActive()) {
+        showToast('프리미엄 상태가 동기화되었습니다. 👑');
+      } else if (payload.message) {
+        showToast(payload.message);
+      }
+      if (tab === 'settings' || tab === 'stats') {
+        render();
       }
     }
   };
@@ -187,6 +310,7 @@ function setupMobileNativeAuthBridge() {
   }
 
   window.requestNativeGoogleLogin = requestNativeGoogleLogin;
+  requestNativePremiumRefresh('native-bridge-init');
 }
 
 function getSystemTheme() {
@@ -224,6 +348,7 @@ function loadState() {
     isOnboarded: false,
     onboardedAt: null,
     isPremium: false,
+    premium: normalizePremiumState({ isPremium: false }),
     auth: {
       isLoggedIn: false,
       provider: null,
@@ -245,6 +370,7 @@ function loadState() {
     const logs = Array.isArray(parsed.logs) ? parsed.logs : [];
     const disabledTypes = parsed.disabledTypes && typeof parsed.disabledTypes === 'object' ? parsed.disabledTypes : {};
     const auth = parsed.auth && typeof parsed.auth === 'object' ? parsed.auth : defaultState.auth;
+    const premium = normalizePremiumState(parsed.premium || { isPremium: parsed.isPremium });
 
     return {
       ...defaultState,
@@ -255,9 +381,10 @@ function loadState() {
         ...defaultState.auth,
         ...auth,
       },
+      premium,
       themeMode: ['auto', 'light', 'dark'].includes(parsed.themeMode) ? parsed.themeMode : 'auto',
       onboardedAt: parsed.onboardedAt || null,
-      isPremium: Boolean(parsed.isPremium),
+      isPremium: Boolean(premium.isPremium),
     };
   } catch (err) {
     console.warn('Failed to parse saved app state. Falling back to defaults.', err);
@@ -428,7 +555,7 @@ function getMonthTotalSoju() {
 function renderAd() {
   if (!adSlot) return;
 
-  if (state.isPremium) {
+  if (isPremiumActive()) {
     adSlot.innerHTML = '';
     return;
   }
@@ -1489,7 +1616,7 @@ function renderStats() {
     })
     .join('');
 
-  const premiumStatsSection = state.isPremium
+  const premiumStatsSection = isPremiumActive()
     ? `
       <section class="card premium-card premium-hero">
         <div class="premium-hero-head">
@@ -1682,6 +1809,9 @@ function renderSettings() {
   const isLoggedIn = Boolean(auth.isLoggedIn);
   const authProviderLabel = auth.provider === 'google' ? 'Google' : '소셜';
   const authDisplayName = getAuthDisplayName();
+  const authDescription = isLoggedIn
+    ? `${authProviderLabel} 계정으로 로그인됨`
+    : '기록/구독 상태를 안전하게 연동하세요.';
   if (!enabledEntries.find(([k]) => k === state.goalBaseType)) {
     state.goalBaseType = enabledEntries[0]?.[0] || 'SOJU';
   }
@@ -1703,7 +1833,7 @@ function renderSettings() {
       <div class="settings-premium-head">
         <div>
           <h2 class="title">👑 프리미엄 혜택</h2>
-          ${state.isPremium
+          ${isPremiumActive()
             ? `<p class="sub">프리미엄 구독 중입니다. (광고 제거)</p>`
             : `<p class="sub">광고를 제거하고 절주에만 집중하세요!</p>`}
         </div>
@@ -1711,17 +1841,24 @@ function renderSettings() {
           <div class="settings-auth-copy">
             <span class="settings-auth-label">계정</span>
             <strong>${isLoggedIn ? authDisplayName : '로그인이 필요해요'}</strong>
-            <span>${isLoggedIn ? `${authProviderLabel} 로그인 완료` : '기록/구독 상태를 안전하게 연동하세요.'}</span>
+            <span>${authDescription}</span>
           </div>
-          <button class="${isLoggedIn ? 'ghost' : 'primary'}" id="settingsNativeGoogleLogin" ${isLoggedIn ? 'disabled' : ''}>
-            ${isLoggedIn ? '로그인 완료' : 'Google 로그인'}
-          </button>
+          <div class="settings-auth-actions">
+            ${isLoggedIn
+              ? `<button class="danger" id="settingsNativeLogout">로그아웃</button>`
+              : `<button class="primary" id="settingsNativeGoogleLogin">Google 로그인</button>`}
+          </div>
         </div>
       </div>
-      <div class="row" style="margin-top:10px;">
-        ${state.isPremium
-          ? `<button class="ghost" id="cancelPremium">[테스트] 프리미엄 해제</button>`
-          : `<button class="primary" id="buyPremium">광고 제거 및 업그레이드</button>`}
+      <div class="list-item" style="margin-top:12px;">
+        <div class="small">구독 상태</div>
+        <strong>${getPremiumStatusText()}</strong>
+        <div class="small">소스: ${state.premium?.entitlementSource || 'none'} · 상품: ${state.premium?.productId || 'jeolju_mate_premium_monthly'}</div>
+      </div>
+      <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap;">
+        ${isPremiumActive()
+          ? `<button class="ghost" id="restorePremium">구독 상태 새로고침</button><button class="ghost" id="cancelPremium">[테스트] 프리미엄 해제</button>`
+          : `<button class="primary" id="buyPremium">Google Play로 업그레이드</button><button class="ghost" id="restorePremium">구독 복원</button>`}
       </div>
     </section>
 
@@ -1761,9 +1898,29 @@ function renderSettings() {
     };
   }
 
+  const nativeLogoutBtn = document.getElementById('settingsNativeLogout');
+  if (nativeLogoutBtn && isLoggedIn) {
+    nativeLogoutBtn.onclick = () => {
+      requestNativeLogout('settings-premium-section');
+    };
+  }
+
   const buyBtn = document.getElementById('buyPremium');
   if (buyBtn) {
     buyBtn.onclick = () => {
+      if (isMobileNativeApp) {
+        requestNativePremiumPurchase('settings-premium-buy');
+        showToast('Google Play 결제를 준비하고 있어요...');
+        return;
+      }
+
+      state.premium = normalizePremiumState({
+        ...state.premium,
+        isPremium: true,
+        status: 'active',
+        entitlementSource: 'debug',
+        lastVerifiedAt: new Date().toISOString(),
+      });
       state.isPremium = true;
       saveState();
       render();
@@ -1771,9 +1928,29 @@ function renderSettings() {
     };
   }
 
+  const restoreBtn = document.getElementById('restorePremium');
+  if (restoreBtn) {
+    restoreBtn.onclick = () => {
+      if (isMobileNativeApp) {
+        requestNativePremiumRestore('settings-premium-restore');
+        showToast('구독 복원을 요청했어요.');
+        return;
+      }
+      showToast('복원은 모바일 앱에서 지원됩니다.');
+    };
+  }
+
   const cancelBtn = document.getElementById('cancelPremium');
   if (cancelBtn) {
     cancelBtn.onclick = () => {
+      state.premium = normalizePremiumState({
+        ...state.premium,
+        isPremium: false,
+        status: 'inactive',
+        entitlementSource: state.premium?.entitlementSource || 'debug',
+        reason: 'debug_cancelled',
+        lastVerifiedAt: new Date().toISOString(),
+      });
       state.isPremium = false;
       saveState();
       render();
