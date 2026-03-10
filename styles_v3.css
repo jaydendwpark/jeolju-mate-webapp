@@ -242,6 +242,10 @@ body {
   z-index: 10;
 }
 
+:root[data-jeolju-native-app='1'] .topbar {
+  padding-top: 14px;
+}
+
 .topbar-left,
 .topbar-right {
   display: flex;

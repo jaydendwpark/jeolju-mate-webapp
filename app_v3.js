@@ -135,6 +135,7 @@ function bindNativeGoogleLoginButton(root = document) {
     el.dataset.nativeGoogleLoginBound = '1';
     el.addEventListener('click', (event) => {
       event.preventDefault();
+      event.stopPropagation();
       requestNativeGoogleLogin(el.getAttribute('data-native-login-source') || 'data-native-google-login');
     });
   });
@@ -1893,9 +1894,6 @@ function renderSettings() {
   if (nativeLoginBtn && !isLoggedIn) {
     nativeLoginBtn.dataset.nativeLoginTrigger = 'google';
     nativeLoginBtn.dataset.nativeLoginSource = 'settings-premium-section';
-    nativeLoginBtn.onclick = () => {
-      requestNativeGoogleLogin('settings-premium-section');
-    };
   }
 
   const nativeLogoutBtn = document.getElementById('settingsNativeLogout');
