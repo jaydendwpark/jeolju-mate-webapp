@@ -154,7 +154,7 @@ function normalizePremiumState(input = {}) {
     entitlementSource: premium.entitlementSource || 'none',
     productId: premium.productId || null,
     planType: premium.planType || 'subscription',
-    platform: premium.platform || (isMobileNativeApp ? 'android' : 'web'),
+    platform: premium.platform || (detectMobileNativeApp() ? 'android' : 'web'),
     purchaseToken: premium.purchaseToken || null,
     orderId: premium.orderId || null,
     expiresAt: hasValidExpiry ? expiresAt.toISOString() : null,
